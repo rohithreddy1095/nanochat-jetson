@@ -66,6 +66,7 @@ parser.add_argument("--chatcore-max-sample", type=int, default=24, help="max pro
 # Data mixture
 parser.add_argument("--mmlu-epochs", type=int, default=3, help="number of epochs of MMLU in training mixture (teaches Multiple Choice)")
 parser.add_argument("--gsm8k-epochs", type=int, default=4, help="number of epochs of GSM8K in training mixture (teaches Math and Tool Use)")
+parser.add_argument("--lite", action="store_true", help="lightweight data mixture (skip SmolTalk/Spelling, keep identity+MMLU+GSM8K only)")
 args = parser.parse_args()
 user_config = vars(args).copy()
 # -----------------------------------------------------------------------------
@@ -117,7 +118,17 @@ for name, fallback, source in [
         print0(f"Using {name}={arg_val}")
 
 orig_model = model
-model = torch.compile(model, dynamic=False)
+# torch.compile requires Triton, which is not available on all platforms (e.g. Jetson aarch64)
+_can_compile = True
+try:
+    import triton  # noqa: F401
+except ImportError:
+    _can_compile = False
+if _can_compile and device_type == "cuda":
+    model = torch.compile(model, dynamic=False)
+    print0("✓ torch.compile enabled")
+else:
+    print0("⚠ torch.compile disabled (Triton not available), running in eager mode")
 depth = model.config.n_layer
 num_flops_per_token = model.estimate_flops()
 tokens_per_fwdbwd = args.device_batch_size * args.max_seq_len # tokens per iteration for a single rank
@@ -162,22 +173,40 @@ for group in optimizer.param_groups:
 
 # SFT data mixture and DataLoader
 identity_conversations_filepath = os.path.join(base_dir, "identity_conversations.jsonl")
-train_tasks = [
-    SmolTalk(split="train"), # 460K rows of general conversations
-    CustomJSON(filepath=identity_conversations_filepath), # 1000 rows of synthetic identity conversations
-    CustomJSON(filepath=identity_conversations_filepath), # 2 epochs of these
-    *[MMLU(subset="auxiliary_train", split="train") for _ in range(args.mmlu_epochs)], # 100K rows per epoch
-    *[GSM8K(subset="main", split="train") for _ in range(args.gsm8k_epochs)], # 8K rows per epoch
-    SimpleSpelling(size=200000, split="train"), # 200K rows of Simple Spelling (e.g. spell the word 'apple')
-    SpellingBee(size=80000, split="train"), # 80K rows of Spelling Bee (e.g. how many 'r' are in 'strawberry'?)
-]
-train_dataset = TaskMixture(train_tasks)
-print0(f"Training mixture: {len(train_dataset):,} rows (MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs})")
-val_dataset = TaskMixture([
-    SmolTalk(split="test"), # 24K rows in test set
-    MMLU(subset="all", split="test", stop=5200), # 14K rows in test set, use only 5.2K to match the train ratios
-    GSM8K(subset="main", split="test", stop=420), # 1.32K rows in test set, use only 420 to match the train ratios
-]) # total: 24K + 14K + 1.32K ~= 39K rows
+rohith_conversations_filepath = os.path.join(base_dir, "rohith_conversations.jsonl")
+if args.lite:
+    # Lightweight mixture for memory-constrained devices (e.g. Jetson Orin 8GB)
+    train_tasks = []
+    if os.path.exists(rohith_conversations_filepath):
+        train_tasks.extend([CustomJSON(filepath=rohith_conversations_filepath)] * 20)  # 20 epochs of Rohith identity
+    if os.path.exists(identity_conversations_filepath):
+        train_tasks.extend([CustomJSON(filepath=identity_conversations_filepath)] * 3)  # 3 epochs of nanochat identity
+    train_tasks.extend([
+        *[GSM8K(subset="main", split="train") for _ in range(min(args.gsm8k_epochs, 2))],  # 8K rows per epoch
+    ])
+    train_dataset = TaskMixture(train_tasks)
+    print0(f"LITE Training mixture: {len(train_dataset):,} rows")
+    val_dataset = TaskMixture([
+        GSM8K(subset="main", split="test", stop=420),
+    ])
+else:
+    train_tasks = [
+        SmolTalk(split="train"), # 460K rows of general conversations
+        CustomJSON(filepath=identity_conversations_filepath), # 1000 rows of synthetic identity conversations
+        CustomJSON(filepath=identity_conversations_filepath), # 2 epochs of these
+        *([CustomJSON(filepath=rohith_conversations_filepath)] * 3 if os.path.exists(rohith_conversations_filepath) else []), # Rohith's custom identity (3 epochs)
+        *[MMLU(subset="auxiliary_train", split="train") for _ in range(args.mmlu_epochs)], # 100K rows per epoch
+        *[GSM8K(subset="main", split="train") for _ in range(args.gsm8k_epochs)], # 8K rows per epoch
+        SimpleSpelling(size=200000, split="train"), # 200K rows of Simple Spelling (e.g. spell the word 'apple')
+        SpellingBee(size=80000, split="train"), # 80K rows of Spelling Bee (e.g. how many 'r' are in 'strawberry'?)
+    ]
+    train_dataset = TaskMixture(train_tasks)
+    print0(f"Training mixture: {len(train_dataset):,} rows (MMLU x{args.mmlu_epochs}, GSM8K x{args.gsm8k_epochs})")
+    val_dataset = TaskMixture([
+        SmolTalk(split="test"), # 24K rows in test set
+        MMLU(subset="all", split="test", stop=5200), # 14K rows in test set, use only 5.2K to match the train ratios
+        GSM8K(subset="main", split="test", stop=420), # 1.32K rows in test set, use only 420 to match the train ratios
+    ]) # total: 24K + 14K + 1.32K ~= 39K rows
 # DataLoader is defined here, it emits inputs, targets : 2D tensors of shape (device_batch_size, max_seq_len)
 # A big problem is that we don't know the final num_iterations in advance. So we create
 # these two global variables and update them from within the data generator.
@@ -446,11 +475,14 @@ while True:
         group["lr"] = group["initial_lr"] * lrm
         if group['kind'] == 'muon':
             group["momentum"] = muon_momentum
+    # Gradient clipping to prevent explosions
     if scaler is not None:
         scaler.unscale_(optimizer)
         if is_ddp_initialized():
             for v in scaler._found_inf_per_device(optimizer).values():
                 dist.all_reduce(v, op=dist.ReduceOp.MAX)
+    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+    if scaler is not None:
         scaler.step(optimizer)
         scaler.update()
     else:
@@ -473,7 +505,7 @@ while True:
     mfu = 100 * flops_per_sec / (gpu_peak_flops * ddp_world_size)
     if step > 10:
         total_training_time += dt # only count the time after the first 10 steps
-    print0(f"step {step:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.2f} | epoch: {current_epoch} | total time: {total_training_time/60:.2f}m")
+    print0(f"step {step:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | gnorm: {grad_norm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | mfu: {mfu:.2f} | epoch: {current_epoch} | total time: {total_training_time/60:.2f}m")
     if step % 10 == 0:
         wandb_run.log({
             "step": step,
