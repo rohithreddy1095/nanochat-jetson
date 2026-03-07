@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Language Forest — Learn How LLMs Work</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL STYLES & THEME
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --bg: #0a1a0f;
+  --bg-card: #0f2518;
+  --bg-card-hover: #153020;
+  --text: #c8e6c9;
+  --text-dim: #6b8f6e;
+  --text-bright: #e8f5e9;
+  --accent: #66bb6a;
+  --accent-glow: #4caf50;
+  --gold: #ffd54f;
+  --orange: #ff9800;
+  --blue: #4fc3f7;
+  --red: #ef5350;
+  --purple: #b39ddb;
+  --border: #1b5e20;
+  --radius: 12px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Firefly particles background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(2px 2px at 20% 30%, rgba(102,187,106,0.3), transparent),
+    radial-gradient(2px 2px at 80% 70%, rgba(255,213,79,0.2), transparent),
+    radial-gradient(1px 1px at 40% 80%, rgba(79,195,247,0.2), transparent),
+    radial-gradient(1px 1px at 70% 20%, rgba(102,187,106,0.2), transparent),
+    radial-gradient(2px 2px at 60% 50%, rgba(255,213,79,0.15), transparent);
+  pointer-events: none;
+  z-index: 0;
+  animation: fireflies 8s infinite alternate;
+}
+@keyframes fireflies {
+  0% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+h1, h2, h3 { color: var(--text-bright); }
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER NAVIGATION
+   ═══════════════════════════════════════════════════════════════ */
+.chapter-nav {
+  display: flex;
+  gap: 6px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+.chapter-tab {
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-dim);
+  transition: all 0.3s;
+  position: relative;
+}
+.chapter-tab:hover { background: var(--bg-card-hover); color: var(--text); }
+.chapter-tab.active {
+  background: var(--border);
+  color: var(--gold);
+  border-color: var(--accent);
+}
+.chapter-tab.completed::after {
+  content: '✓';
+  position: absolute;
+  top: -6px; right: -6px;
+  background: var(--accent);
+  color: var(--bg);
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: bold;
+}
+.chapter-tab.locked { opacity: 0.4; cursor: not-allowed; }
+
+/* Progress bar */
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-card);
+  border-radius: 3px;
+  margin: 10px 0 20px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--gold));
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER CONTENT
+   ═══════════════════════════════════════════════════════════════ */
+.chapter { display: none; }
+.chapter.active { display: block; animation: fadeIn 0.5s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+}
+
+.metaphor-box {
+  background: linear-gradient(135deg, #1a3a20, #0f2518);
+  border-left: 4px solid var(--accent);
+  padding: 16px 20px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 16px 0;
+  font-style: italic;
+  color: var(--text-bright);
+}
+
+.aha-box {
+  background: linear-gradient(135deg, #3a2a00, #251800);
+  border-left: 4px solid var(--gold);
+  padding: 16px 20px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 16px 0;
+}
+.aha-box strong { color: var(--gold); }
+
+/* Buttons */
+.btn {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+}
+.btn-primary:hover { background: var(--accent-glow); transform: translateY(-1px); }
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--bg-card-hover); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-gold {
+  background: linear-gradient(135deg, var(--gold), var(--orange));
+  color: #1a1a00;
+}
+.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(255,213,79,0.3); }
+
+/* Game areas */
+canvas {
+  border-radius: var(--radius);
+  display: block;
+  margin: 0 auto;
+  cursor: pointer;
+}
+
+.game-controls {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.score-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+.instructions {
+  background: rgba(102,187,106,0.08);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin: 12px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Token grid */
+.token-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  justify-content: center;
+}
+.token-cell {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.token-cell:hover { border-color: var(--accent); transform: scale(1.1); }
+.token-cell.selected { border-color: var(--gold); background: rgba(255,213,79,0.15); }
+.token-cell.correct { border-color: var(--accent); background: rgba(102,187,106,0.2); }
+.token-cell.wrong { border-color: var(--red); background: rgba(239,83,80,0.15); animation: shake 0.3s; }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* Sequence display */
+.sequence-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+.seq-token {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 16px;
+  min-width: 36px;
+  text-align: center;
+}
+.seq-arrow { color: var(--text-dim); font-size: 18px; }
+
+/* Slider */
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.slider-group label {
+  min-width: 120px;
+  font-size: 14px;
+}
+.slider-group input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 6px;
+}
+.slider-value {
+  min-width: 50px;
+  text-align: right;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+/* Result message */
+.result-msg {
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  margin: 12px 0;
+  font-weight: 600;
+  text-align: center;
+  animation: fadeIn 0.3s;
+}
+.result-msg.success { background: rgba(102,187,106,0.15); color: var(--accent); border: 1px solid var(--accent); }
+.result-msg.fail { background: rgba(239,83,80,0.1); color: var(--red); border: 1px solid var(--red); }
+
+/* Title screen */
+.title-screen {
+  text-align: center;
+  padding: 60px 20px;
+}
+.title-screen h1 {
+  font-size: 48px;
+  background: linear-gradient(135deg, var(--accent), var(--gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 12px;
+}
+.title-screen .subtitle {
+  font-size: 18px;
+  color: var(--text-dim);
+  margin-bottom: 40px;
+}
+.chapter-preview {
+  display: grid;
+  gap: 12px;
+  max-width: 600px;
+  margin: 0 auto 40px;
+  text-align: left;
+}
+.chapter-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+.chapter-preview-item:hover { border-color: var(--accent); }
+.ch-icon { font-size: 28px; width: 40px; text-align: center; }
+.ch-info h3 { font-size: 15px; margin-bottom: 2px; }
+.ch-info p { font-size: 13px; color: var(--text-dim); }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .title-screen h1 { font-size: 32px; }
+  .chapter-tab { padding: 8px 10px; font-size: 12px; }
+  .token-cell { width: 40px; height: 40px; font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     TITLE SCREEN
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="title-screen" class="title-screen">
+  <h1>🌲 The Language Forest</h1>
+  <p class="subtitle">Build a language model from scratch — no code, just intuition</p>
+
+  <div class="chapter-preview">
+    <div class="chapter-preview-item">
+      <div class="ch-icon">🐜</div>
+      <div class="ch-info">
+        <h3>Chapter 1: The Ant Trail</h3>
+        <p>Turn messages into scent codes that ants can carry</p>
+      </div>
+    </div>
+    <div class="chapter-preview-item">
+      <div class="ch-icon">🏔️</div>
+      <div class="ch-info">
+        <h3>Chapter 2: The River Network</h3>
+        <p>Trace water upstream to find where it came from</p>
+      </div>
+    </div>
+    <div class="chapter-preview-item">
+      <div class="ch-icon">🌳</div>
+      <div class="ch-info">
+        <h3>Chapter 3: The Whispering Trees</h3>
+        <p>Trees share wisdom through underground root networks</p>
+      </div>
+    </div>
+    <div class="chapter-preview-item">
+      <div class="ch-icon">🏘️</div>
+      <div class="ch-info">
+        <h3>Chapter 4: The Village Elder</h3>
+        <p>An elder learns to predict patterns through practice</p>
+      </div>
+    </div>
+    <div class="chapter-preview-item">
+      <div class="ch-icon">🔮</div>
+      <div class="ch-info">
+        <h3>Chapter 5: The Oracle Speaks</h3>
+        <p>Your creation comes alive and speaks new names</p>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-gold" onclick="startGame()" style="font-size:18px; padding: 14px 40px;">
+    🌱 Enter the Forest
+  </button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     GAME UI (hidden until start)
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="game-ui" style="display:none;">
+
+<div class="chapter-nav" id="chapter-nav"></div>
+<div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+
+<!-- ─────────────────────────────────────────────────────────────
+     CHAPTER 1: THE ANT TRAIL (TOKENIZER)
+     ───────────────────────────────────────────────────────────── -->
+<div class="chapter" id="ch1">
+  <h2>🐜 Chapter 1: The Ant Trail</h2>
+
+  <div class="metaphor-box">
+    Deep in the forest, ants communicate by leaving <strong>scent trails</strong>. Each unique scent represents a different signal. But the forest council needs to send <em>written messages</em> through the ant network. Your job: create a <strong>codebook</strong> that converts letters into scent numbers the ants can carry.
+  </div>
+
+  <!-- Stage 1: Build the codebook -->
+  <div class="card" id="ch1-stage1">
+    <h3>🎯 Mission 1: Build the Codebook</h3>
+    <p style="margin:8px 0; color:var(--text-dim)">Each unique letter needs a unique scent number. Click the letters in any order to assign them scent IDs.</p>
+    <div class="instructions">
+      👆 Click each letter to assign it the next available scent number. The order YOU choose becomes the codebook!
+    </div>
+    <div class="token-grid" id="ch1-letter-grid"></div>
+    <div style="margin-top:12px; text-align:center;">
+      <span class="score-display" id="ch1-assigned-count">Assigned: 0 / 26</span>
+      <span id="ch1-codebook-preview" style="margin-left:12px; font-size:13px; color:var(--text-dim)"></span>
+    </div>
+    <div id="ch1-stage1-complete" style="display:none; margin-top:12px;">
+      <div class="result-msg success">✅ Codebook complete! Every letter has a scent number.</div>
+      <button class="btn btn-primary" onclick="ch1StartStage2()">Continue → Encode a Message</button>
+    </div>
+  </div>
+
+  <!-- Stage 2: Encode a name -->
+  <div class="card" id="ch1-stage2" style="display:none;">
+    <h3>🎯 Mission 2: Encode a Name</h3>
+    <p style="margin:8px 0; color:var(--text-dim)">Use your codebook to encode the name below into scent numbers. Don't forget: every message starts and ends with the special ⟨BOS⟩ scent!</p>
+    <div class="instructions">
+      The <strong style="color:var(--gold)">⟨BOS⟩</strong> token (Beginning of Sequence) tells the ants "a new message starts/ends here." Its scent number is <strong id="ch1-bos-id"></strong>.
+    </div>
+    <div style="text-align:center; margin:16px 0;">
+      <span style="font-size:28px; font-weight:bold; color:var(--gold)" id="ch1-encode-word"></span>
+    </div>
+    <p style="margin:8px 0; font-size:14px;">Click the correct scent number for each position:</p>
+    <div class="sequence-row" id="ch1-encode-row"></div>
+    <div id="ch1-num-pad" style="margin-top:12px;"></div>
+    <div id="ch1-stage2-result"></div>
+  </div>
+
+  <!-- Stage 3: Decode -->
+  <div class="card" id="ch1-stage3" style="display:none;">
+    <h3>🎯 Mission 3: Decode a Scent Trail</h3>
+    <p style="margin:8px 0; color:var(--text-dim)">An ant patrol brought back this scent sequence. What name did they carry?</p>
+    <div class="sequence-row" id="ch1-decode-row"></div>
+    <div style="margin:12px 0; text-align:center;">
+      <input type="text" id="ch1-decode-input" placeholder="Type the decoded name..."
+        style="padding:10px 18px; font-size:18px; border-radius:8px; border:2px solid var(--border); background:var(--bg); color:var(--text-bright); text-align:center; width:200px;">
+      <button class="btn btn-primary" onclick="ch1CheckDecode()" style="margin-left:8px;">Check</button>
+    </div>
+    <div id="ch1-stage3-result"></div>
+  </div>
+
+  <!-- Aha moment -->
+  <div class="card" id="ch1-aha" style="display:none;">
+    <div class="aha-box">
+      <strong>💡 Aha! You just built a Tokenizer!</strong><br><br>
+      In real LLMs like ChatGPT:<br>
+      • Your <strong>codebook</strong> = the tokenizer's vocabulary<br>
+      • Your <strong>scent numbers</strong> = token IDs<br>
+      • The <strong>⟨BOS⟩ scent</strong> = special tokens that mark boundaries<br><br>
+      The only difference: real tokenizers use ~100,000 tokens that represent <em>chunks</em> of text (like "the", "ing", "tion") instead of single characters, for efficiency. But the idea is identical!
+    </div>
+    <div style="text-align:center; margin-top:16px;">
+      <button class="btn btn-gold" onclick="completeChapter(1)">🏆 Chapter Complete! Continue →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────
+     CHAPTER 2: THE RIVER NETWORK (GRADIENTS)
+     ───────────────────────────────────────────────────────────── -->
+<div class="chapter" id="ch2">
+  <h2>🏔️ Chapter 2: The River Network</h2>
+
+  <div class="metaphor-box">
+    Rain falls on the mountain peaks. Water flows downhill through a network of <strong>streams and gates</strong>, combining and splitting, until it reaches the ocean. Each gate controls how much water passes through. Your mission: <strong>adjust the gates</strong> to control the ocean level — but you can only see the final result. You must <em>trace the water backward</em> to figure out which gate to change.
+  </div>
+
+  <div class="card">
+    <h3>🎯 Mission: Hit the Target Ocean Level</h3>
+    <div class="instructions">
+      Each gate <strong>multiplies</strong> the water flowing through it. The final ocean level is the result of water flowing through all gates.<br>
+      🎯 Adjust the gates to make the ocean level match the <strong style="color:var(--gold)">target</strong>. Watch how changes propagate!
+    </div>
+    <canvas id="ch2-canvas" width="800" height="400"></canvas>
+    <div id="ch2-controls" style="margin-top:12px;"></div>
+    <div id="ch2-result"></div>
+  </div>
+
+  <div class="card" id="ch2-aha" style="display:none;">
+    <div class="aha-box">
+      <strong>💡 Aha! You just did Backpropagation!</strong><br><br>
+      In real neural networks:<br>
+      • <strong>Rain</strong> = input data flowing through the network<br>
+      • <strong>Gates</strong> = model parameters (weights)<br>
+      • <strong>Ocean level</strong> = the model's output (and loss)<br>
+      • <strong>Tracing backward</strong> = computing gradients (∂loss/∂weight)<br><br>
+      The chain rule is exactly like tracing water upstream: the effect at each gate depends on everything downstream of it. This is what the <code>Value.backward()</code> function does automatically!
+    </div>
+    <div style="text-align:center; margin-top:16px;">
+      <button class="btn btn-gold" onclick="completeChapter(2)">🏆 Chapter Complete! Continue →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────
+     CHAPTER 3: THE WHISPERING TREES (ATTENTION)
+     ───────────────────────────────────────────────────────────── -->
+<div class="chapter" id="ch3">
+  <h2>🌳 Chapter 3: The Whispering Trees</h2>
+
+  <div class="metaphor-box">
+    The ancient trees of the forest communicate through an underground <strong>mycelium network</strong> — like nature's internet. When a young sapling needs wisdom, it sends a <strong>question</strong> through its roots. Each elder tree has <strong>expertise</strong> in different topics. The sapling must decide: <em>which elders should I listen to most?</em>
+  </div>
+
+  <div class="card">
+    <h3>🎯 Mission: Help the Sapling Find Wisdom</h3>
+    <div class="instructions">
+      The sapling has a <strong style="color:var(--blue)">question</strong> (Query). Each elder tree has a <strong style="color:var(--accent)">topic</strong> (Key) and <strong style="color:var(--purple)">advice</strong> (Value).<br>
+      • Trees whose <em>topic matches the question</em> should get <strong>more attention</strong><br>
+      • Drag the attention sliders to decide how much to listen to each elder<br>
+      • The sapling's wisdom = weighted mix of all elders' advice
+    </div>
+    <canvas id="ch3-canvas" width="800" height="350"></canvas>
+    <div id="ch3-controls" style="margin-top:12px;"></div>
+    <div id="ch3-result"></div>
+  </div>
+
+  <div class="card" id="ch3-aha" style="display:none;">
+    <div class="aha-box">
+      <strong>💡 Aha! You just computed Attention!</strong><br><br>
+      In real transformers:<br>
+      • The sapling's <strong style="color:var(--blue)">question</strong> = Query (Q)<br>
+      • Each elder's <strong style="color:var(--accent)">topic</strong> = Key (K)<br>
+      • Each elder's <strong style="color:var(--purple)">advice</strong> = Value (V)<br>
+      • <strong>Matching question to topic</strong> = Q·K dot product<br>
+      • <strong>Attention weights</strong> = softmax of those scores<br>
+      • <strong>Final wisdom</strong> = weighted sum of Values<br><br>
+      Multi-head attention = multiple saplings asking <em>different types of questions</em> simultaneously, then combining their answers!
+    </div>
+    <div style="text-align:center; margin-top:16px;">
+      <button class="btn btn-gold" onclick="completeChapter(3)">🏆 Chapter Complete! Continue →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────
+     CHAPTER 4: THE VILLAGE ELDER (TRAINING)
+     ───────────────────────────────────────────────────────────── -->
+<div class="chapter" id="ch4">
+  <h2>🏘️ Chapter 4: The Village Elder</h2>
+
+  <div class="metaphor-box">
+    In the forest village, the <strong>Elder</strong> has a gift — she tries to predict what comes next in any message. At first, her guesses are random. But after each guess, the village tells her if she was right or wrong, and she <strong>adjusts her intuition</strong>. Over hundreds of messages, she gets remarkably good at predicting patterns.
+  </div>
+
+  <div class="card">
+    <h3>🎯 Mission: Train the Elder</h3>
+    <div class="instructions">
+      Watch the Elder learn! Each round, she sees part of a name and guesses the next letter.<br>
+      • The <strong style="color:var(--red)">loss</strong> measures how surprised she is (lower = better)<br>
+      • Click <strong>Train Step</strong> to show her one name and let her learn from it<br>
+      • Get the loss below <strong style="color:var(--gold)">2.0</strong> to win!
+    </div>
+    <canvas id="ch4-canvas" width="800" height="300"></canvas>
+    <div class="game-controls" style="justify-content:center; margin-top:12px;">
+      <button class="btn btn-primary" id="ch4-step-btn" onclick="ch4TrainStep()">🎓 Train Step</button>
+      <button class="btn btn-secondary" id="ch4-auto-btn" onclick="ch4AutoTrain()">⚡ Auto-Train ×50</button>
+      <span class="score-display">Step: <span id="ch4-step-num">0</span></span>
+      <span class="score-display">Loss: <span id="ch4-loss-val">?.??</span></span>
+    </div>
+    <div id="ch4-prediction-display" style="margin-top:12px; text-align:center;"></div>
+    <div id="ch4-result"></div>
+  </div>
+
+  <div class="card" id="ch4-aha" style="display:none;">
+    <div class="aha-box">
+      <strong>💡 Aha! You just trained a Language Model!</strong><br><br>
+      • The Elder's <strong>intuition</strong> = model parameters (weights)<br>
+      • <strong>Showing her names</strong> = feeding training data<br>
+      • Her <strong>surprise level</strong> = the loss function (-log probability)<br>
+      • <strong>Adjusting intuition</strong> = gradient descent (optimizer step)<br>
+      • <strong>Loss going down</strong> = the model is learning!<br><br>
+      ChatGPT's training is identical — just with trillions of words instead of names, running on thousands of GPUs instead of one Elder.
+    </div>
+    <div style="text-align:center; margin-top:16px;">
+      <button class="btn btn-gold" onclick="completeChapter(4)">🏆 Chapter Complete! Continue →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────
+     CHAPTER 5: THE ORACLE (INFERENCE)
+     ───────────────────────────────────────────────────────────── -->
+<div class="chapter" id="ch5">
+  <h2>🔮 Chapter 5: The Oracle Speaks</h2>
+
+  <div class="metaphor-box">
+    The Elder has learned the patterns of names. She is now the <strong>Oracle</strong>. Feed her a starting signal, and she will dream up entirely new names — names that <em>never existed</em> but <strong>sound like they could</strong>. You control the Oracle's <strong>temperature</strong>: calm her for safe, predictable names, or excite her for wild, creative ones.
+  </div>
+
+  <div class="card">
+    <h3>🎯 Mission: Generate Real-Sounding Names</h3>
+    <div class="instructions">
+      Adjust the <strong style="color:var(--gold)">temperature</strong> and generate names. Rate each name: does it sound real?<br>
+      Get <strong>5 good names</strong> to complete the game!
+    </div>
+    <div class="slider-group">
+      <label>🌡️ Temperature:</label>
+      <input type="range" id="ch5-temp" min="10" max="150" value="50" oninput="ch5UpdateTemp()">
+      <span class="slider-value" id="ch5-temp-val">0.5</span>
+    </div>
+    <div style="text-align:center; margin:6px 0; font-size:13px; color:var(--text-dim)">
+      🧊 Conservative ←──────→ Creative 🌪️
+    </div>
+    <div style="text-align:center; margin:16px 0;">
+      <button class="btn btn-primary" onclick="ch5Generate()" id="ch5-gen-btn">🔮 Ask the Oracle</button>
+    </div>
+    <div id="ch5-generated" style="margin-top:12px;"></div>
+    <div style="text-align:center; margin-top:8px;">
+      <span class="score-display">Good names: <span id="ch5-good-count">0</span> / 5</span>
+    </div>
+    <div id="ch5-result"></div>
+  </div>
+
+  <div class="card" id="ch5-aha" style="display:none;">
+    <div class="aha-box">
+      <strong>💡 Aha! You just did LLM Inference!</strong><br><br>
+      • The <strong>Oracle</strong> = your trained model<br>
+      • <strong>Temperature</strong> = creativity control (low → greedy, high → random)<br>
+      • Each generated letter = <strong>sampling from a probability distribution</strong><br>
+      • <strong>⟨BOS⟩ → letters → ⟨BOS⟩</strong> = autoregressive generation<br><br>
+      When you chat with ChatGPT, it's doing exactly this — generating one token at a time, sampling from probabilities, until it decides the response is complete.
+    </div>
+    <div style="text-align:center; margin-top:16px;">
+      <button class="btn btn-gold" onclick="showVictory()">🏆 Complete the Journey!</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────
+     VICTORY SCREEN
+     ───────────────────────────────────────────────────────────── -->
+<div class="chapter" id="victory">
+  <div style="text-align:center; padding:40px 20px;">
+    <h1 style="font-size:42px; margin-bottom:12px;">🌟 You Built a Language Model! 🌟</h1>
+    <p style="font-size:18px; color:var(--text-dim); margin-bottom:30px;">
+      From ant trails to oracle prophecies — you now understand how LLMs work.
+    </p>
+    <div class="card" style="max-width:600px; margin:0 auto; text-align:left;">
+      <h3 style="margin-bottom:12px;">What you built:</h3>
+      <div style="display:grid; gap:8px;">
+        <div>🐜 <strong>Tokenizer</strong> — converts text ↔ numbers</div>
+        <div>🏔️ <strong>Backpropagation</strong> — traces errors backward to fix weights</div>
+        <div>🌳 <strong>Attention</strong> — lets each token focus on relevant context</div>
+        <div>🏘️ <strong>Training</strong> — learns patterns from data via gradient descent</div>
+        <div>🔮 <strong>Inference</strong> — generates new text by sampling predictions</div>
+      </div>
+      <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border); font-size:14px; color:var(--text-dim);">
+        This is the <em>complete algorithm</em> behind every large language model. From this 3,000-parameter name generator to GPT-4's 1.8 trillion parameters — the only difference is scale and efficiency.
+      </div>
+    </div>
+    <div style="margin-top:30px;">
+      <button class="btn btn-secondary" onclick="location.reload()">🔄 Play Again</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end game-ui -->
+</div><!-- end container -->
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   GAME STATE
+   ═══════════════════════════════════════════════════════════════ */
+const CHAPTERS = [
+  { id: 'ch1', icon: '🐜', name: 'Ant Trail' },
+  { id: 'ch2', icon: '🏔️', name: 'River' },
+  { id: 'ch3', icon: '🌳', name: 'Trees' },
+  { id: 'ch4', icon: '🏘️', name: 'Village' },
+  { id: 'ch5', icon: '🔮', name: 'Oracle' },
+];
+
+let state = {
+  currentChapter: 0,
+  completed: [false, false, false, false, false],
+  // Ch1 state
+  ch1Codebook: {},
+  ch1NextId: 0,
+  ch1EncodeWord: '',
+  ch1EncodeTarget: [],
+  ch1EncodePos: 0,
+  ch1DecodeWord: '',
+  ch1DecodeTokens: [],
+  // Ch2 state
+  ch2Gates: [1.0, 1.0, 1.0],
+  ch2Target: 0,
+  ch2Rain: [3, 2],
+  // Ch3 state
+  ch3Weights: [0.25, 0.25, 0.25, 0.25],
+  ch3Scenario: null,
+  // Ch4 state
+  ch4Step: 0,
+  ch4Losses: [],
+  ch4Model: null,
+  // Ch5 state
+  ch5GoodNames: 0,
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════════════════════════════ */
+function startGame() {
+  document.getElementById('title-screen').style.display = 'none';
+  document.getElementById('game-ui').style.display = 'block';
+  buildNav();
+  goToChapter(0);
+  ch1Init();
+}
+
+function buildNav() {
+  const nav = document.getElementById('chapter-nav');
+  nav.innerHTML = CHAPTERS.map((ch, i) => {
+    const cls = i === 0 ? 'active' : (i > 0 ? 'locked' : '');
+    return `<div class="chapter-tab ${cls}" id="tab-${i}" onclick="navClick(${i})">${ch.icon} ${ch.name}</div>`;
+  }).join('');
+}
+
+function navClick(i) {
+  if (i > 0 && !state.completed[i-1] && i !== state.currentChapter) return;
+  goToChapter(i);
+}
+
+function goToChapter(i) {
+  state.currentChapter = i;
+  document.querySelectorAll('.chapter').forEach(c => c.classList.remove('active'));
+  document.getElementById(CHAPTERS[i].id).classList.add('active');
+  document.querySelectorAll('.chapter-tab').forEach((t, j) => {
+    t.classList.remove('active');
+    t.classList.toggle('locked', j > 0 && !state.completed[j-1] && j !== i);
+    t.classList.toggle('completed', state.completed[j]);
+  });
+  document.getElementById(`tab-${i}`).classList.add('active');
+  document.getElementById(`tab-${i}`).classList.remove('locked');
+  updateProgress();
+
+  // Initialize chapter if needed
+  if (i === 1) ch2Init();
+  if (i === 2) ch3Init();
+  if (i === 3) ch4Init();
+  if (i === 4) ch5Init();
+}
+
+function completeChapter(n) {
+  state.completed[n - 1] = true;
+  if (n < 5) {
+    goToChapter(n);
+  } else {
+    showVictory();
+  }
+}
+
+function showVictory() {
+  state.completed[4] = true;
+  document.querySelectorAll('.chapter').forEach(c => c.classList.remove('active'));
+  document.getElementById('victory').classList.add('active');
+  updateProgress();
+  buildNav();
+}
+
+function updateProgress() {
+  const done = state.completed.filter(x => x).length;
+  document.getElementById('progress-fill').style.width = `${done * 20}%`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER 1: ANT TRAIL (TOKENIZER)
+   ═══════════════════════════════════════════════════════════════ */
+const ALPHABET = 'abcdefghijklmnopqrstuvwxyz';
+const SAMPLE_NAMES = ['emma','olivia','liam','noah','ava','sophia','jackson','lucas','mia','harper'];
+
+function ch1Init() {
+  state.ch1Codebook = {};
+  state.ch1NextId = 0;
+  const grid = document.getElementById('ch1-letter-grid');
+  grid.innerHTML = ALPHABET.split('').map(ch =>
+    `<div class="token-cell" id="ch1-cell-${ch}" onclick="ch1AssignLetter('${ch}')">${ch}</div>`
+  ).join('');
+}
+
+function ch1AssignLetter(ch) {
+  if (state.ch1Codebook[ch] !== undefined) return;
+  state.ch1Codebook[ch] = state.ch1NextId;
+  const cell = document.getElementById(`ch1-cell-${ch}`);
+  cell.classList.add('correct');
+  cell.innerHTML = `${ch}<br><span style="font-size:11px;color:var(--gold)">${state.ch1NextId}</span>`;
+  cell.style.cursor = 'default';
+  state.ch1NextId++;
+  document.getElementById('ch1-assigned-count').innerHTML = `Assigned: ${state.ch1NextId} / 26`;
+
+  // Show last few assignments
+  const entries = Object.entries(state.ch1Codebook).slice(-5);
+  const preview = entries.map(([c, id]) => `${c}→${id}`).join('  ');
+  document.getElementById('ch1-codebook-preview').textContent = preview + (state.ch1NextId > 5 ? ' ...' : '');
+
+  if (state.ch1NextId === 26) {
+    document.getElementById('ch1-stage1-complete').style.display = 'block';
+  }
+}
+
+function ch1StartStage2() {
+  document.getElementById('ch1-stage2').style.display = 'block';
+  const bos = 26;
+  document.getElementById('ch1-bos-id').textContent = bos;
+
+  const word = SAMPLE_NAMES[Math.floor(Math.random() * SAMPLE_NAMES.length)];
+  state.ch1EncodeWord = word;
+  state.ch1EncodeTarget = [bos, ...word.split('').map(c => state.ch1Codebook[c]), bos];
+  state.ch1EncodePos = 0;
+
+  document.getElementById('ch1-encode-word').textContent = word;
+  ch1RenderEncodeRow();
+  ch1RenderNumPad();
+  document.getElementById('ch1-stage2').scrollIntoView({ behavior: 'smooth' });
+}
+
+function ch1RenderEncodeRow() {
+  const row = document.getElementById('ch1-encode-row');
+  const labels = ['⟨BOS⟩', ...state.ch1EncodeWord.split(''), '⟨BOS⟩'];
+  row.innerHTML = labels.map((label, i) => {
+    let bg, color;
+    if (i < state.ch1EncodePos) { bg = 'rgba(102,187,106,0.2)'; color = 'var(--accent)'; }
+    else if (i === state.ch1EncodePos) { bg = 'rgba(255,213,79,0.2)'; color = 'var(--gold)'; }
+    else { bg = 'var(--bg-card)'; color = 'var(--text-dim)'; }
+    const numStr = i < state.ch1EncodePos ? `<br><strong>${state.ch1EncodeTarget[i]}</strong>` : (i === state.ch1EncodePos ? '<br>❓' : '');
+    return `<div class="seq-token" style="background:${bg};color:${color};border:1px solid ${color};min-width:48px">${label}${numStr}</div>`;
+  }).join('<span class="seq-arrow">→</span>');
+}
+
+function ch1RenderNumPad() {
+  const pad = document.getElementById('ch1-num-pad');
+  const nums = Array.from({length: 27}, (_, i) => i);
+  pad.innerHTML = '<div class="token-grid">' + nums.map(n =>
+    `<div class="token-cell" style="width:40px;height:40px;font-size:14px" onclick="ch1PickNum(${n})">${n}</div>`
+  ).join('') + '</div>';
+}
+
+function ch1PickNum(n) {
+  const target = state.ch1EncodeTarget[state.ch1EncodePos];
+  if (n === target) {
+    state.ch1EncodePos++;
+    ch1RenderEncodeRow();
+    if (state.ch1EncodePos >= state.ch1EncodeTarget.length) {
+      document.getElementById('ch1-num-pad').style.display = 'none';
+      document.getElementById('ch1-stage2-result').innerHTML =
+        '<div class="result-msg success">✅ Perfect encoding! The ants can carry this message!</div>' +
+        '<button class="btn btn-primary" onclick="ch1StartStage3()" style="margin-top:8px">Continue → Decode a Trail</button>';
+    }
+  } else {
+    // Flash wrong
+    const cells = document.querySelectorAll('#ch1-num-pad .token-cell');
+    cells[n].classList.add('wrong');
+    setTimeout(() => cells[n].classList.remove('wrong'), 400);
+  }
+}
+
+function ch1StartStage3() {
+  document.getElementById('ch1-stage3').style.display = 'block';
+  const word = SAMPLE_NAMES.filter(n => n !== state.ch1EncodeWord)[Math.floor(Math.random() * 8)];
+  state.ch1DecodeWord = word;
+  const bos = 26;
+  state.ch1DecodeTokens = [bos, ...word.split('').map(c => state.ch1Codebook[c]), bos];
+
+  const row = document.getElementById('ch1-decode-row');
+  row.innerHTML = state.ch1DecodeTokens.map(t =>
+    `<div class="seq-token" style="background:rgba(79,195,247,0.15);color:var(--blue);border:1px solid var(--blue)">${t}</div>`
+  ).join('<span class="seq-arrow">→</span>');
+  document.getElementById('ch1-stage3').scrollIntoView({ behavior: 'smooth' });
+}
+
+function ch1CheckDecode() {
+  const input = document.getElementById('ch1-decode-input').value.trim().toLowerCase();
+  const result = document.getElementById('ch1-stage3-result');
+  if (input === state.ch1DecodeWord) {
+    result.innerHTML = `<div class="result-msg success">✅ Correct! The scent trail said "${state.ch1DecodeWord}"!</div>`;
+    document.getElementById('ch1-aha').style.display = 'block';
+    document.getElementById('ch1-aha').scrollIntoView({ behavior: 'smooth' });
+  } else {
+    result.innerHTML = `<div class="result-msg fail">❌ Not quite — try again! Hint: use your codebook above.</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER 2: RIVER NETWORK (GRADIENTS)
+   ═══════════════════════════════════════════════════════════════ */
+function ch2Init() {
+  state.ch2Rain = [3, 2];
+  state.ch2Gates = [1.5, 0.8, 1.0];
+  state.ch2Target = 8.5;
+  ch2BuildControls();
+  ch2Draw();
+}
+
+function ch2BuildControls() {
+  const ctr = document.getElementById('ch2-controls');
+  ctr.innerHTML = `
+    <div style="text-align:center;margin-bottom:8px;">
+      <span class="score-display">🎯 Target: <span style="color:var(--gold)">${state.ch2Target}</span></span>
+      <span class="score-display" style="margin-left:8px">🌊 Current: <span id="ch2-current" style="color:var(--blue)">?</span></span>
+    </div>
+    ${state.ch2Gates.map((g, i) => `
+      <div class="slider-group">
+        <label>⛩️ Gate ${i+1}:</label>
+        <input type="range" min="0" max="300" value="${g*100}" oninput="ch2UpdateGate(${i}, this.value)">
+        <span class="slider-value" id="ch2-gate-${i}">${g.toFixed(1)}</span>
+      </div>
+    `).join('')}
+    <div style="text-align:center; margin-top:8px;">
+      <button class="btn btn-primary" onclick="ch2Check()">Check River Level</button>
+    </div>
+  `;
+}
+
+function ch2UpdateGate(i, val) {
+  state.ch2Gates[i] = val / 100;
+  document.getElementById(`ch2-gate-${i}`).textContent = (val/100).toFixed(1);
+  ch2Draw();
+}
+
+function ch2Draw() {
+  const c = document.getElementById('ch2-canvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = '#0a1a0f';
+  ctx.fillRect(0, 0, W, H);
+
+  const r1 = state.ch2Rain[0], r2 = state.ch2Rain[1];
+  const g = state.ch2Gates;
+  // Flow: stream1 = rain1 * gate1, stream2 = rain2 * gate2, merge = (s1+s2)*gate3
+  const s1 = r1 * g[0];
+  const s2 = r2 * g[1];
+  const ocean = (s1 + s2) * g[2];
+
+  // Node positions
+  const nodes = [
+    { x: 100, y: 80, label: `🌧️ Rain ${r1}`, val: r1, color: '#4fc3f7' },
+    { x: 100, y: 320, label: `🌧️ Rain ${r2}`, val: r2, color: '#4fc3f7' },
+    { x: 320, y: 80, label: `Gate ×${g[0].toFixed(1)}`, val: s1, color: '#66bb6a' },
+    { x: 320, y: 320, label: `Gate ×${g[1].toFixed(1)}`, val: s2, color: '#66bb6a' },
+    { x: 520, y: 200, label: `Merge`, val: s1+s2, color: '#b39ddb' },
+    { x: 700, y: 200, label: `Gate ×${g[2].toFixed(1)}`, val: ocean, color: '#66bb6a' },
+  ];
+
+  // Draw connections (rivers)
+  const drawRiver = (from, to, width) => {
+    ctx.beginPath();
+    ctx.moveTo(from.x + 30, from.y);
+    ctx.lineTo(to.x - 30, to.y);
+    ctx.strokeStyle = `rgba(79,195,247,${Math.min(1, width/10 * 0.8 + 0.1)})`;
+    ctx.lineWidth = Math.max(2, Math.min(12, width * 2));
+    ctx.stroke();
+  };
+
+  drawRiver(nodes[0], nodes[2], s1);
+  drawRiver(nodes[1], nodes[3], s2);
+  drawRiver(nodes[2], nodes[4], s1);
+  drawRiver(nodes[3], nodes[4], s2);
+  drawRiver(nodes[4], nodes[5], s1 + s2);
+
+  // Draw nodes
+  nodes.forEach(n => {
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, 28, 0, Math.PI * 2);
+    ctx.fillStyle = n.color + '33';
+    ctx.fill();
+    ctx.strokeStyle = n.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#e8f5e9';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(n.label, n.x, n.y - 6);
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = n.color;
+    ctx.fillText(n.val.toFixed(1), n.x, n.y + 14);
+  });
+
+  // Ocean
+  ctx.fillStyle = 'rgba(79,195,247,0.1)';
+  ctx.fillRect(740, 150, 55, 100);
+  ctx.strokeStyle = '#4fc3f7';
+  ctx.strokeRect(740, 150, 55, 100);
+  ctx.fillStyle = '#4fc3f7';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🌊', 767, 190);
+  ctx.fillText(ocean.toFixed(1), 767, 215);
+
+  // Target line
+  ctx.fillStyle = '#ffd54f';
+  ctx.font = '13px sans-serif';
+  ctx.fillText(`Target: ${state.ch2Target}`, 767, 240);
+
+  document.getElementById('ch2-current').textContent = ocean.toFixed(1);
+}
+
+function ch2Check() {
+  const ocean = (state.ch2Rain[0]*state.ch2Gates[0] + state.ch2Rain[1]*state.ch2Gates[1]) * state.ch2Gates[2];
+  const diff = Math.abs(ocean - state.ch2Target);
+  const result = document.getElementById('ch2-result');
+  if (diff < 0.3) {
+    result.innerHTML = '<div class="result-msg success">✅ Perfect! The ocean level matches the target!</div>';
+    document.getElementById('ch2-aha').style.display = 'block';
+    document.getElementById('ch2-aha').scrollIntoView({ behavior: 'smooth' });
+  } else {
+    const hint = ocean > state.ch2Target ? 'Try reducing some gates.' : 'Try increasing some gates.';
+    result.innerHTML = `<div class="result-msg fail">Off by ${diff.toFixed(1)} — ${hint}</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER 3: WHISPERING TREES (ATTENTION)
+   ═══════════════════════════════════════════════════════════════ */
+const TREE_SCENARIOS = [
+  {
+    query: 'What letter follows "ch"?',
+    trees: [
+      { topic: 'Letters after "ch"', value: 'r', match: 0.9 },
+      { topic: 'Common endings', value: 'e', match: 0.3 },
+      { topic: 'Vowel patterns', value: 'a', match: 0.5 },
+      { topic: 'Rare combinations', value: 'z', match: 0.1 },
+    ],
+    best: 'r',
+    bestWeights: [0.6, 0.1, 0.2, 0.1],
+  },
+  {
+    query: 'What ends the name "ann_"?',
+    trees: [
+      { topic: 'Name endings', value: 'a', match: 0.8 },
+      { topic: 'Starting sounds', value: 'm', match: 0.1 },
+      { topic: 'Common suffixes', value: 'e', match: 0.6 },
+      { topic: 'Consonant clusters', value: 'k', match: 0.2 },
+    ],
+    best: 'a',
+    bestWeights: [0.5, 0.05, 0.35, 0.1],
+  },
+];
+
+function ch3Init() {
+  state.ch3Scenario = TREE_SCENARIOS[Math.floor(Math.random() * TREE_SCENARIOS.length)];
+  state.ch3Weights = [0.25, 0.25, 0.25, 0.25];
+  ch3BuildControls();
+  ch3Draw();
+}
+
+function ch3BuildControls() {
+  const s = state.ch3Scenario;
+  const ctr = document.getElementById('ch3-controls');
+  ctr.innerHTML = `
+    <div style="text-align:center; margin-bottom:8px;">
+      <strong style="color:var(--blue)">Sapling's Question:</strong> "${s.query}"
+    </div>
+    ${s.trees.map((t, i) => `
+      <div class="slider-group">
+        <label style="min-width:160px">🌲 ${t.topic}→"${t.value}"</label>
+        <input type="range" min="0" max="100" value="25" oninput="ch3UpdateWeight(${i}, this.value)">
+        <span class="slider-value" id="ch3-w-${i}">25%</span>
+      </div>
+    `).join('')}
+    <div style="text-align:center; margin-top:8px;">
+      <span class="score-display" id="ch3-prediction">Prediction: ?</span>
+      <button class="btn btn-primary" onclick="ch3Check()" style="margin-left:8px;">Submit Attention</button>
+    </div>
+  `;
+}
+
+function ch3UpdateWeight(i, val) {
+  state.ch3Weights[i] = parseInt(val);
+  // Normalize
+  const total = state.ch3Weights.reduce((a,b) => a+b, 0) || 1;
+  state.ch3Weights.forEach((w, j) => {
+    document.getElementById(`ch3-w-${j}`).textContent = Math.round(w/total*100) + '%';
+  });
+
+  // Compute prediction
+  const s = state.ch3Scenario;
+  const norm = state.ch3Weights.map(w => w / total);
+  const scores = {};
+  s.trees.forEach((t, j) => {
+    scores[t.value] = (scores[t.value] || 0) + norm[j];
+  });
+  const best = Object.entries(scores).sort((a,b) => b[1] - a[1])[0];
+  document.getElementById('ch3-prediction').innerHTML = `Prediction: "<strong style="color:var(--gold)">${best[0]}</strong>" (${Math.round(best[1]*100)}%)`;
+
+  ch3Draw();
+}
+
+function ch3Draw() {
+  const c = document.getElementById('ch3-canvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0a1a0f';
+  ctx.fillRect(0, 0, W, H);
+
+  const s = state.ch3Scenario;
+  const total = state.ch3Weights.reduce((a,b) => a+b, 0) || 1;
+  const norm = state.ch3Weights.map(w => w / total);
+
+  // Draw sapling (center bottom)
+  const sapX = W/2, sapY = H - 40;
+  ctx.font = '36px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🌱', sapX, sapY);
+  ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#4fc3f7';
+  ctx.fillText(s.query, sapX, sapY + 18);
+
+  // Draw elder trees
+  const treePositions = [
+    { x: 100, y: 70 }, { x: 300, y: 50 }, { x: 500, y: 50 }, { x: 700, y: 70 }
+  ];
+
+  s.trees.forEach((tree, i) => {
+    const tp = treePositions[i];
+    const weight = norm[i];
+
+    // Draw root connection
+    ctx.beginPath();
+    ctx.moveTo(sapX, sapY - 25);
+    ctx.quadraticCurveTo((sapX+tp.x)/2, H/2 + 30, tp.x, tp.y + 35);
+    ctx.strokeStyle = `rgba(179,157,219,${weight * 1.5})`;
+    ctx.lineWidth = Math.max(1, weight * 10);
+    ctx.stroke();
+
+    // Draw tree
+    ctx.font = '32px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🌳', tp.x, tp.y);
+
+    // Labels
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = '#66bb6a';
+    ctx.fillText(tree.topic, tp.x, tp.y + 20);
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = '#b39ddb';
+    ctx.fillText(`"${tree.value}"`, tp.x, tp.y + 38);
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#ffd54f';
+    ctx.fillText(`${Math.round(weight*100)}%`, tp.x, tp.y + 54);
+  });
+}
+
+function ch3Check() {
+  const s = state.ch3Scenario;
+  const total = state.ch3Weights.reduce((a,b) => a+b, 0) || 1;
+  const norm = state.ch3Weights.map(w => w / total);
+
+  // Check if highest weight goes to best-matching tree
+  const maxIdx = norm.indexOf(Math.max(...norm));
+  const bestTreeIdx = s.trees.findIndex(t => t.value === s.best);
+  const result = document.getElementById('ch3-result');
+
+  if (maxIdx === bestTreeIdx && norm[maxIdx] > 0.35) {
+    result.innerHTML = `<div class="result-msg success">✅ Great attention pattern! You focused on the most relevant elder tree!</div>`;
+    document.getElementById('ch3-aha').style.display = 'block';
+    document.getElementById('ch3-aha').scrollIntoView({ behavior: 'smooth' });
+  } else {
+    result.innerHTML = `<div class="result-msg fail">Not quite — think about which elder's topic best matches the question. The "${s.trees[bestTreeIdx].topic}" elder might know the answer!</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER 4: VILLAGE ELDER (TRAINING)
+   ═══════════════════════════════════════════════════════════════ */
+// Simple bigram model for visualization
+function ch4Init() {
+  if (state.ch4Model) return;
+  // Initialize bigram counts (uniform)
+  state.ch4Model = {};
+  for (let i = 0; i < 27; i++) {
+    state.ch4Model[i] = {};
+    for (let j = 0; j < 27; j++) {
+      state.ch4Model[i][j] = 1; // uniform prior
+    }
+  }
+  state.ch4Step = 0;
+  state.ch4Losses = [];
+  ch4Draw();
+}
+
+function ch4TrainStep() {
+  const names = SAMPLE_NAMES;
+  const name = names[state.ch4Step % names.length];
+  const bos = 26;
+  const tokens = [bos, ...name.split('').map(c => ALPHABET.indexOf(c)), bos];
+
+  let totalLoss = 0;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const curr = tokens[i];
+    const next = tokens[i + 1];
+    // Compute probability
+    const counts = state.ch4Model[curr];
+    const total = Object.values(counts).reduce((a,b) => a+b, 0);
+    const prob = counts[next] / total;
+    totalLoss += -Math.log(prob);
+    // Update counts (learn!)
+    counts[next] += 2; // reinforce what we saw
+  }
+  const avgLoss = totalLoss / (tokens.length - 1);
+
+  state.ch4Step++;
+  state.ch4Losses.push(avgLoss);
+
+  document.getElementById('ch4-step-num').textContent = state.ch4Step;
+  document.getElementById('ch4-loss-val').textContent = avgLoss.toFixed(2);
+  document.getElementById('ch4-loss-val').style.color = avgLoss < 2.0 ? 'var(--accent)' : 'var(--gold)';
+
+  // Show what happened
+  const display = document.getElementById('ch4-prediction-display');
+  display.innerHTML = `<span style="color:var(--text-dim)">Trained on: "</span><strong style="color:var(--text-bright)">${name}</strong><span style="color:var(--text-dim)">" — Loss: ${avgLoss.toFixed(2)}</span>`;
+
+  ch4Draw();
+
+  if (avgLoss < 2.0 && state.ch4Step >= 20) {
+    const result = document.getElementById('ch4-result');
+    result.innerHTML = '<div class="result-msg success">✅ The Elder has learned! Loss is below 2.0!</div>';
+    document.getElementById('ch4-aha').style.display = 'block';
+    document.getElementById('ch4-aha').scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+function ch4AutoTrain() {
+  let count = 0;
+  const interval = setInterval(() => {
+    ch4TrainStep();
+    count++;
+    if (count >= 50 || (state.ch4Losses[state.ch4Losses.length-1] < 2.0 && state.ch4Step >= 20)) {
+      clearInterval(interval);
+    }
+  }, 60);
+}
+
+function ch4Draw() {
+  const c = document.getElementById('ch4-canvas');
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0a1a0f';
+  ctx.fillRect(0, 0, W, H);
+
+  if (state.ch4Losses.length === 0) {
+    ctx.fillStyle = '#6b8f6e';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click "Train Step" to begin!', W/2, H/2);
+    return;
+  }
+
+  // Draw loss curve
+  const losses = state.ch4Losses;
+  const maxL = Math.max(...losses, 3.5);
+  const minL = Math.min(...losses, 0.5);
+  const pad = 50;
+
+  // Axes
+  ctx.strokeStyle = '#1b5e20';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad); ctx.lineTo(pad, H - pad); ctx.lineTo(W - pad, H - pad);
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#6b8f6e';
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const val = minL + (maxL - minL) * (4 - i) / 4;
+    const y = pad + (H - 2*pad) * i / 4;
+    ctx.fillText(val.toFixed(1), pad - 8, y + 4);
+  }
+  ctx.textAlign = 'center';
+  ctx.fillText('Training Steps →', W/2, H - 10);
+  ctx.save();
+  ctx.translate(14, H/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.fillText('Loss (surprise) ↓', 0, 0);
+  ctx.restore();
+
+  // Target line
+  const targetY = pad + (H - 2*pad) * (1 - (2.0 - minL) / (maxL - minL));
+  ctx.strokeStyle = '#ffd54f44';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(pad, targetY);
+  ctx.lineTo(W - pad, targetY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#ffd54f';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('🎯 Target: 2.0', W - pad + 5, targetY + 4);
+
+  // Loss curve
+  ctx.beginPath();
+  ctx.strokeStyle = '#ef5350';
+  ctx.lineWidth = 2;
+  losses.forEach((l, i) => {
+    const x = pad + (W - 2*pad) * i / Math.max(losses.length - 1, 1);
+    const y = pad + (H - 2*pad) * (1 - (l - minL) / (maxL - minL));
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Current point
+  const lastX = pad + (W - 2*pad);
+  const lastY = pad + (H - 2*pad) * (1 - (losses[losses.length-1] - minL) / (maxL - minL));
+  ctx.beginPath();
+  ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ef5350';
+  ctx.fill();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CHAPTER 5: THE ORACLE (INFERENCE)
+   ═══════════════════════════════════════════════════════════════ */
+function ch5Init() {
+  state.ch5GoodNames = 0;
+  document.getElementById('ch5-good-count').textContent = '0';
+}
+
+function ch5UpdateTemp() {
+  const v = document.getElementById('ch5-temp').value / 100;
+  document.getElementById('ch5-temp-val').textContent = v.toFixed(1);
+}
+
+function ch5Generate() {
+  // Generate using the bigram model from ch4
+  if (!state.ch4Model) {
+    // Quick train if skipped
+    ch4Init();
+    for (let i = 0; i < 200; i++) {
+      const name = SAMPLE_NAMES[i % SAMPLE_NAMES.length];
+      const bos = 26;
+      const tokens = [bos, ...name.split('').map(c => ALPHABET.indexOf(c)), bos];
+      for (let j = 0; j < tokens.length - 1; j++) {
+        state.ch4Model[tokens[j]][tokens[j+1]] += 2;
+      }
+    }
+  }
+
+  const temp = document.getElementById('ch5-temp').value / 100;
+  const generated = document.getElementById('ch5-generated');
+
+  // Generate a name
+  let token = 26; // BOS
+  let name = [];
+  const steps = [];
+
+  for (let i = 0; i < 15; i++) {
+    const counts = state.ch4Model[token];
+    const total = Object.values(counts).reduce((a,b) => a+b, 0);
+    const probs = {};
+    let maxProb = 0;
+
+    for (let j = 0; j < 27; j++) {
+      const p = Math.pow(counts[j] / total, 1 / temp);
+      probs[j] = p;
+    }
+    const pTotal = Object.values(probs).reduce((a,b) => a+b, 0);
+
+    // Sample
+    let r = Math.random() * pTotal;
+    let chosen = 0;
+    for (let j = 0; j < 27; j++) {
+      r -= probs[j];
+      if (r <= 0) { chosen = j; break; }
+    }
+
+    steps.push({ from: token === 26 ? '⟨BOS⟩' : ALPHABET[token], to: chosen === 26 ? '⟨BOS⟩' : ALPHABET[chosen], prob: (probs[chosen] / pTotal * 100).toFixed(0) });
+
+    if (chosen === 26) break;
+    name.push(ALPHABET[chosen]);
+    token = chosen;
+  }
+
+  const nameStr = name.join('');
+
+  // Build result HTML
+  const stepsHtml = steps.map(s =>
+    `<span style="font-size:12px;color:var(--text-dim)">${s.from}→</span><strong style="color:var(--accent)">${s.to}</strong><span style="font-size:10px;color:var(--text-dim)">(${s.prob}%)</span>`
+  ).join(' ');
+
+  const nameCard = `
+    <div class="card" style="padding:14px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div>
+        <div style="font-size:24px; font-weight:bold; color:var(--text-bright);">${nameStr || '(empty)'}</div>
+        <div style="margin-top:4px; font-size:11px;">${stepsHtml}</div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-primary" style="padding:6px 14px; font-size:13px;" onclick="ch5Rate(true, this)">👍 Real</button>
+        <button class="btn btn-secondary" style="padding:6px 14px; font-size:13px;" onclick="ch5Rate(false, this)">👎 Weird</button>
+      </div>
+    </div>
+  `;
+  generated.innerHTML = nameCard + generated.innerHTML;
+}
+
+function ch5Rate(good, btn) {
+  const card = btn.closest('.card');
+  card.querySelectorAll('button').forEach(b => b.disabled = true);
+
+  if (good) {
+    state.ch5GoodNames++;
+    card.style.borderColor = 'var(--accent)';
+    document.getElementById('ch5-good-count').textContent = state.ch5GoodNames;
+  } else {
+    card.style.borderColor = 'var(--red)';
+    card.style.opacity = '0.5';
+  }
+
+  if (state.ch5GoodNames >= 5) {
+    document.getElementById('ch5-result').innerHTML =
+      '<div class="result-msg success">✅ You found 5 good names! The Oracle speaks truth!</div>';
+    document.getElementById('ch5-aha').style.display = 'block';
+    document.getElementById('ch5-aha').scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+</script>
+</body>
+</html>
