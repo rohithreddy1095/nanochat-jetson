@@ -447,6 +447,14 @@ canvas {
     </div>
   </div>
 
+  <!-- Codebook Reference (shown during encode/decode) -->
+  <div class="card" id="ch1-codebook-ref" style="display:none;">
+    <details open>
+      <summary style="cursor:pointer; font-weight:600; color:var(--gold); margin-bottom:8px;">📖 Your Codebook (click to hide/show)</summary>
+      <div id="ch1-codebook-table" style="display:flex; flex-wrap:wrap; gap:4px; justify-content:center;"></div>
+    </details>
+  </div>
+
   <!-- Stage 2: Encode a name -->
   <div class="card" id="ch1-stage2" style="display:none;">
     <h3>🎯 Mission 2: Encode a Name</h3>
@@ -834,7 +842,25 @@ function ch1AssignLetter(ch) {
   }
 }
 
+function ch1ShowCodebookRef() {
+  const ref = document.getElementById('ch1-codebook-ref');
+  ref.style.display = 'block';
+  const table = document.getElementById('ch1-codebook-table');
+  const entries = Object.entries(state.ch1Codebook).sort((a,b) => a[1] - b[1]);
+  table.innerHTML = entries.map(([ch, id]) =>
+    `<span style="display:inline-flex;align-items:center;gap:2px;padding:3px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:48px;justify-content:center;">` +
+    `<strong style="color:var(--text-bright)">${ch}</strong>` +
+    `<span style="color:var(--text-dim)">→</span>` +
+    `<span style="color:var(--gold)">${id}</span></span>`
+  ).join('') +
+  `<span style="display:inline-flex;align-items:center;gap:2px;padding:3px 8px;background:rgba(255,213,79,0.1);border:1px solid var(--gold);border-radius:6px;font-size:13px;min-width:64px;justify-content:center;">` +
+  `<strong style="color:var(--gold)">BOS</strong>` +
+  `<span style="color:var(--text-dim)">→</span>` +
+  `<span style="color:var(--gold)">26</span></span>`;
+}
+
 function ch1StartStage2() {
+  ch1ShowCodebookRef();
   document.getElementById('ch1-stage2').style.display = 'block';
   const bos = 26;
   document.getElementById('ch1-bos-id').textContent = bos;
@@ -861,6 +887,24 @@ function ch1RenderEncodeRow() {
     const numStr = i < state.ch1EncodePos ? `<br><strong>${state.ch1EncodeTarget[i]}</strong>` : (i === state.ch1EncodePos ? '<br>❓' : '');
     return `<div class="seq-token" style="background:${bg};color:${color};border:1px solid ${color};min-width:48px">${label}${numStr}</div>`;
   }).join('<span class="seq-arrow">→</span>');
+
+  // Highlight current letter in codebook reference
+  const currentLabel = labels[state.ch1EncodePos];
+  document.querySelectorAll('#ch1-codebook-table span').forEach(el => {
+    el.style.boxShadow = 'none';
+    el.style.transform = 'scale(1)';
+  });
+  if (state.ch1EncodePos < labels.length) {
+    const spans = document.querySelectorAll('#ch1-codebook-table span');
+    spans.forEach(el => {
+      const strong = el.querySelector('strong');
+      if (strong && ((currentLabel === '⟨BOS⟩' && strong.textContent === 'BOS') ||
+                      strong.textContent === currentLabel)) {
+        el.style.boxShadow = '0 0 12px var(--gold)';
+        el.style.transform = 'scale(1.15)';
+      }
+    });
+  }
 }
 
 function ch1RenderNumPad() {
