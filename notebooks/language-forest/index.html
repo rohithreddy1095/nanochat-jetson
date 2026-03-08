@@ -5,1437 +5,1009 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Language Forest</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: #050d08;
-  color: #c8e6c9;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  overflow-x: hidden;
-  min-height: 100vh;
-}
-#game-canvas {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw; height: 100vh;
-  z-index: 0;
-}
-#ui-layer {
-  position: relative;
-  z-index: 1;
-  pointer-events: none;
-}
-#ui-layer > * { pointer-events: auto; }
-.hud {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  padding: 12px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: linear-gradient(180deg, rgba(5,13,8,0.9) 0%, transparent 100%);
-  z-index: 10;
-}
-.hud-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #66bb6a;
-}
-.hud-chapter {
-  font-size: 13px;
-  color: #ffd54f;
-}
-.hud-progress {
-  display: flex; gap: 6px;
-}
-.hud-dot {
-  width: 12px; height: 12px;
-  border-radius: 50%;
-  border: 2px solid #1b5e20;
-  transition: all 0.5s;
-}
-.hud-dot.done { background: #66bb6a; border-color: #66bb6a; }
-.hud-dot.active { border-color: #ffd54f; box-shadow: 0 0 8px #ffd54f; }
-
-/* Panels that float over the canvas */
-.panel {
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(10, 26, 15, 0.92);
-  border: 1px solid #1b5e20;
-  border-radius: 16px;
-  padding: 20px 28px;
-  max-width: 700px;
-  width: calc(100% - 40px);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-  z-index: 5;
-  animation: panelIn 0.5s ease-out;
-}
-@keyframes panelIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(30px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-.panel-center {
-  bottom: auto;
-  top: 50%;
-  transform: translate(-50%, -50%);
-}
-@keyframes panelCenterIn {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-.panel-center { animation: panelCenterIn 0.6s ease-out; }
-
-.panel h2 {
-  color: #e8f5e9;
-  font-size: 22px;
-  margin-bottom: 8px;
-}
-.panel p {
-  color: #a5c4a8;
-  font-size: 14px;
-  line-height: 1.6;
-  margin-bottom: 12px;
-}
-.panel .highlight { color: #ffd54f; font-weight: 600; }
-.panel .green { color: #66bb6a; font-weight: 600; }
-
-.btn {
-  padding: 12px 28px;
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 700;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.btn:hover { transform: translateY(-2px); }
-.btn:active { transform: translateY(0); }
-.btn-gold {
-  background: linear-gradient(135deg, #ffd54f, #ff9800);
-  color: #1a1a00;
-  box-shadow: 0 4px 20px rgba(255,213,79,0.3);
-}
-.btn-green {
-  background: linear-gradient(135deg, #66bb6a, #388e3c);
-  color: #fff;
-  box-shadow: 0 4px 20px rgba(102,187,106,0.3);
-}
-.btn-dim {
-  background: rgba(102,187,106,0.15);
-  color: #66bb6a;
-  border: 1px solid #1b5e20;
-}
-
-/* Codebook grid */
-.cb-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  justify-content: center;
-  margin: 10px 0;
-}
-.cb-cell {
-  width: 42px; height: 50px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: rgba(102,187,106,0.08);
-  border: 2px solid #1b5e20;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
-  user-select: none;
-}
-.cb-cell:hover { border-color: #66bb6a; background: rgba(102,187,106,0.15); }
-.cb-cell .letter { font-size: 18px; font-weight: 700; color: #e8f5e9; }
-.cb-cell .num { font-size: 11px; color: #ffd54f; margin-top: 1px; }
-.cb-cell.assigned {
-  border-color: #66bb6a;
-  background: rgba(102,187,106,0.2);
-}
-.cb-cell.glow {
-  border-color: #ffd54f;
-  box-shadow: 0 0 16px rgba(255,213,79,0.4);
-  transform: scale(1.1);
-}
-
-/* Encode sequence */
-.seq-display {
-  display: flex;
-  gap: 3px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin: 12px 0;
-}
-.seq-slot {
-  width: 48px; height: 56px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  border: 2px solid transparent;
-  font-weight: 700;
-  transition: all 0.2s;
-}
-.seq-slot .s-char { font-size: 16px; }
-.seq-slot .s-num { font-size: 13px; margin-top: 2px; }
-.seq-slot.done { border-color: #66bb6a; background: rgba(102,187,106,0.12); }
-.seq-slot.done .s-char { color: #a5c4a8; }
-.seq-slot.done .s-num { color: #66bb6a; }
-.seq-slot.active { border-color: #ffd54f; background: rgba(255,213,79,0.1); box-shadow: 0 0 12px rgba(255,213,79,0.2); }
-.seq-slot.active .s-char { color: #ffd54f; }
-.seq-slot.waiting .s-char { color: #3a5a3e; }
-
-/* Number pad */
-.numpad {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: center;
-  margin: 8px 0;
-}
-.numpad-btn {
-  width: 36px; height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(79,195,247,0.08);
-  border: 1px solid #1b5e20;
-  border-radius: 6px;
-  color: #c8e6c9;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.numpad-btn:hover { background: rgba(79,195,247,0.2); border-color: #4fc3f7; }
-.numpad-btn.wrong { animation: shake 0.3s; background: rgba(239,83,80,0.2); border-color: #ef5350; }
-@keyframes shake { 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)} }
-
-.msg {
-  text-align: center;
-  padding: 10px;
-  border-radius: 8px;
-  margin: 8px 0;
-  font-weight: 600;
-  animation: panelIn 0.3s;
-}
-.msg-ok { background: rgba(102,187,106,0.15); color: #66bb6a; }
-.msg-err { background: rgba(239,83,80,0.1); color: #ef5350; }
-
-/* Slider */
-.range-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0;
-}
-.range-row label { min-width: 90px; font-size: 13px; color: #a5c4a8; }
-.range-row input[type=range] { flex: 1; accent-color: #66bb6a; }
-.range-row .rv { min-width: 40px; text-align: right; color: #ffd54f; font-weight: 700; font-size: 14px; }
-
-/* Aha box */
-.aha {
-  background: linear-gradient(135deg, rgba(255,213,79,0.08), rgba(255,152,0,0.05));
-  border-left: 3px solid #ffd54f;
-  padding: 14px 16px;
-  border-radius: 0 10px 10px 0;
-  margin: 12px 0;
-  font-size: 13px;
-  line-height: 1.7;
-}
-.aha strong { color: #ffd54f; }
-.aha .real { color: #4fc3f7; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050d08;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;user-select:none}
+canvas{display:block}
+#ui{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#ui>*{pointer-events:auto}
+.tip{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);color:#6b8f6e;font-size:14px;text-align:center;
+  background:rgba(5,13,8,0.85);padding:10px 24px;border-radius:12px;border:1px solid #1b5e2044;
+  max-width:600px;backdrop-filter:blur(8px);transition:opacity 0.5s;line-height:1.5}
+.tip .hl{color:#ffd54f;font-weight:600}
+.tip .gr{color:#66bb6a;font-weight:600}
+.tip .bl{color:#4fc3f7;font-weight:600}
+.hud{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+.hud-dot{width:32px;height:32px;border-radius:50%;border:2px solid #1b5e20;display:flex;align-items:center;
+  justify-content:center;font-size:14px;transition:all 0.5s;cursor:pointer;background:rgba(5,13,8,0.7)}
+.hud-dot.done{border-color:#66bb6a;background:rgba(102,187,106,0.15)}
+.hud-dot.active{border-color:#ffd54f;box-shadow:0 0 12px #ffd54f66}
+.float-panel{position:fixed;left:50%;transform:translateX(-50%);background:rgba(10,26,15,0.92);
+  border:1px solid #1b5e2066;border-radius:14px;padding:16px 22px;backdrop-filter:blur(10px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);max-width:480px;width:calc(100% - 32px);z-index:5}
+.float-panel.top{top:60px}.float-panel.mid{top:50%;transform:translate(-50%,-50%)}
+.float-panel.bot{bottom:20px}
+.float-panel h2{color:#e8f5e9;font-size:20px;margin-bottom:6px;text-align:center}
+.float-panel p{color:#a5c4a8;font-size:13px;line-height:1.5;text-align:center;margin:4px 0}
+.btn{padding:10px 24px;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;transition:all 0.15s}
+.btn:hover{transform:scale(1.05)}.btn:active{transform:scale(0.98)}
+.btn-gold{background:linear-gradient(135deg,#ffd54f,#ff9800);color:#1a1a00}
+.btn-green{background:linear-gradient(135deg,#66bb6a,#388e3c);color:#fff}
+.btn-dim{background:rgba(102,187,106,0.1);color:#66bb6a;border:1px solid #1b5e20}
+.aha-box{background:linear-gradient(135deg,rgba(255,213,79,0.06),rgba(255,152,0,0.03));
+  border-left:3px solid #ffd54f;padding:12px 14px;border-radius:0 10px 10px 0;margin:10px 0;
+  font-size:12px;line-height:1.7;color:#a5c4a8;text-align:left}
+.aha-box strong{color:#ffd54f}.aha-box .r{color:#4fc3f7}
 </style>
 </head>
 <body>
-
-<canvas id="game-canvas"></canvas>
-
-<div id="ui-layer">
-  <div class="hud" id="hud" style="display:none;">
-    <div class="hud-title">🌲 The Language Forest</div>
-    <div class="hud-chapter" id="hud-chapter"></div>
-    <div class="hud-progress" id="hud-dots"></div>
-  </div>
-  <div id="panels"></div>
-</div>
+<canvas id="c"></canvas>
+<div id="ui"><div class="hud" id="hud" style="display:none"></div><div id="panels"></div></div>
 
 <script>
-/* ═══════════════════════════════════════════════════════════════
-   GAME ENGINE
-   ═══════════════════════════════════════════════════════════════ */
-const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext('2d');
-let W, H;
+// =============================================
+// ENGINE
+// =============================================
+const C = document.getElementById('c'), X = C.getContext('2d');
+let W, H, mx = 0, my = 0, mdown = false, mclick = null, kpress = null;
+const resize = () => { W = C.width = innerWidth; H = C.height = innerHeight; };
+addEventListener('resize', resize); resize();
+addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+addEventListener('mousedown', e => { mdown = true; mclick = {x:e.clientX, y:e.clientY}; });
+addEventListener('mouseup', () => mdown = false);
+addEventListener('keydown', e => { kpress = e.key; });
+addEventListener('touchstart', e => { const t=e.touches[0]; mx=t.clientX; my=t.clientY; mdown=true; mclick={x:mx,y:my}; }, {passive:true});
+addEventListener('touchmove', e => { const t=e.touches[0]; mx=t.clientX; my=t.clientY; }, {passive:true});
+addEventListener('touchend', () => mdown=false);
 
-function resize() {
-  W = canvas.width = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resize);
-resize();
+const lerp=(a,b,t)=>a+(b-a)*t, rand=(a,b)=>a+Math.random()*(b-a), randInt=(a,b)=>Math.floor(rand(a,b));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), ease=t=>t<.5?2*t*t:-1+(4-2*t)*t;
+const dist=(x1,y1,x2,y2)=>Math.sqrt((x2-x1)**2+(y2-y1)**2);
 
-// ─── Utilities ───
-const lerp = (a, b, t) => a + (b - a) * t;
-const rand = (lo, hi) => lo + Math.random() * (hi - lo);
-const randInt = (lo, hi) => Math.floor(rand(lo, hi));
-const ease = t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-
-// ─── Particle System ───
-class Particle {
-  constructor(x, y, opts = {}) {
-    this.x = x; this.y = y;
-    this.vx = opts.vx || 0;
-    this.vy = opts.vy || 0;
-    this.life = opts.life || 2;
-    this.maxLife = this.life;
-    this.size = opts.size || 3;
-    this.color = opts.color || '#66bb6a';
-    this.gravity = opts.gravity || 0;
-    this.friction = opts.friction || 1;
-    this.glow = opts.glow || 0;
-    this.dead = false;
-  }
-  update(dt) {
-    this.vy += this.gravity * dt;
-    this.vx *= this.friction;
-    this.vy *= this.friction;
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-    this.life -= dt;
-    if (this.life <= 0) this.dead = true;
-  }
-  draw(ctx) {
-    const alpha = clamp(this.life / this.maxLife, 0, 1);
-    const s = this.size * (0.5 + 0.5 * alpha);
-    if (this.glow > 0) {
-      ctx.shadowBlur = this.glow;
-      ctx.shadowColor = this.color;
-    }
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = this.color;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, s, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
-  }
-}
-
+// Particles
 let particles = [];
-function spawnParticles(x, y, count, opts = {}) {
-  for (let i = 0; i < count; i++) {
-    particles.push(new Particle(x, y, {
-      vx: rand(-60, 60) * (opts.spread || 1),
-      vy: rand(-80, 10) * (opts.spread || 1),
-      life: rand(0.5, 1.5) * (opts.lifeMul || 1),
-      size: rand(1.5, 4) * (opts.sizeMul || 1),
-      color: opts.color || '#66bb6a',
-      gravity: opts.gravity ?? 40,
-      glow: opts.glow || 8,
-      ...opts,
-    }));
-  }
+class P{constructor(x,y,o={}){this.x=x;this.y=y;this.vx=o.vx||0;this.vy=o.vy||0;this.life=this.ml=o.life||1.5;
+  this.sz=o.sz||3;this.col=o.col||'#66bb6a';this.g=o.g||0;this.gl=o.gl||0}
+  update(dt){this.vy+=this.g*dt;this.x+=this.vx*dt;this.y+=this.vy*dt;this.life-=dt;return this.life>0}
+  draw(){const a=clamp(this.life/this.ml,0,1),s=this.sz*(0.5+0.5*a);if(this.gl){X.shadowBlur=this.gl;X.shadowColor=this.col}
+    X.globalAlpha=a;X.fillStyle=this.col;X.beginPath();X.arc(this.x,this.y,s,0,Math.PI*2);X.fill();X.globalAlpha=1;X.shadowBlur=0}}
+function burst(x,y,n,o={}){for(let i=0;i<n;i++)particles.push(new P(x,y,{vx:rand(-60,60)*(o.sp||1),vy:rand(-80,10)*(o.sp||1),
+  life:rand(.5,1.5)*(o.lm||1),sz:rand(1.5,4)*(o.sm||1),col:o.col||'#66bb6a',g:o.g??30,gl:o.gl||8}))}
+
+// Fireflies
+const FF=Array.from({length:35},()=>({x:rand(0,2e3),y:rand(0,1e3),ph:rand(0,7),sp:rand(.3,1),sz:rand(1,2.5),h:randInt(80,140),dx:rand(-10,10)}));
+
+// Screen shake
+let shakeAmt = 0, shakeDecay = 0.9;
+function shake(amt) { shakeAmt = Math.max(shakeAmt, amt); }
+
+// =============================================
+// SCENE SYSTEM
+// =============================================
+let scene = null, sceneTime = 0, fadeAlpha = 0, fadeTarget = 0, nextScene = null;
+const scenes = {};
+function setScene(name) {
+  if (fadeAlpha > 0.01) return;
+  nextScene = name; fadeTarget = 1;
+}
+function activateScene(name) {
+  scene = name; sceneTime = 0;
+  particles = []; shakeAmt = 0;
+  if (scenes[name] && scenes[name].init) scenes[name].init();
+  updateHud();
+}
+function tip(html) { let d=document.getElementById('tip'); if(!d){d=document.createElement('div');d.id='tip';d.className='tip';document.getElementById('panels').appendChild(d)}d.innerHTML=html;d.style.opacity='1'; }
+function hideTip() { const d=document.getElementById('tip');if(d)d.style.opacity='0'; }
+function setPanel(id,cls,html){let d=document.getElementById(id);if(!d){d=document.createElement('div');d.id=id;d.className='float-panel '+cls;document.getElementById('panels').appendChild(d)}d.innerHTML=html;return d}
+function clearPanels(){document.getElementById('panels').innerHTML='';}
+function updateHud(){const h=document.getElementById('hud');if(scene==='title'){h.style.display='none';return;}
+  h.style.display='flex';const icons=['🐜','🏔️','🌳','🏘️','🔮'],names=['ch1','ch2','ch3','ch4','ch5'];
+  h.innerHTML=icons.map((ic,i)=>`<div class="hud-dot ${completed[i]?'done':''} ${scene===names[i]?'active':''}" onclick="setScene('${names[i]}')">${ic}</div>`).join('');}
+let completed = [false,false,false,false,false];
+
+// =============================================
+// BACKGROUND
+// =============================================
+let bgHue = 130, bgTarget = 130;
+function drawBg(t) {
+  bgHue = lerp(bgHue, bgTarget, 0.02);
+  const g = X.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, `hsl(${bgHue},30%,3%)`);
+  g.addColorStop(0.5, `hsl(${bgHue},25%,5%)`);
+  g.addColorStop(1, `hsl(${bgHue},20%,6%)`);
+  X.fillStyle = g; X.fillRect(0,0,W,H);
+  X.fillStyle = `hsl(${bgHue},20%,4%)`;
+  X.fillRect(0,H*0.88,W,H*0.12);
+  FF.forEach(f => {
+    f.x += f.dx * 0.016; f.y += Math.sin(f.ph + t*f.sp) * 8 * 0.016;
+    if(f.x<-20)f.x=W+20; if(f.x>W+20)f.x=-20;
+    const b = 0.3 + 0.7 * Math.sin(f.ph + t*f.sp*2)**2;
+    X.globalAlpha = b*0.5; X.shadowBlur=10; X.shadowColor=`hsl(${f.h},70%,60%)`;
+    X.fillStyle=`hsl(${f.h},70%,70%)`; X.beginPath(); X.arc(f.x,f.y,f.sz,0,Math.PI*2); X.fill();
+    X.shadowBlur=0; X.globalAlpha=1;
+  });
 }
 
-// ─── Fireflies (ambient) ───
-class Firefly {
-  constructor() { this.reset(); }
-  reset() {
-    this.x = rand(0, W);
-    this.y = rand(0, H);
-    this.phase = rand(0, Math.PI * 2);
-    this.speed = rand(0.3, 1.2);
-    this.size = rand(1, 3);
-    this.hue = rand(80, 140);
-    this.drift = rand(-15, 15);
-  }
-  update(dt, t) {
-    this.x += this.drift * dt;
-    this.y += Math.sin(this.phase + t * this.speed) * 12 * dt;
-    if (this.x < -20 || this.x > W + 20 || this.y < -20 || this.y > H + 20) this.reset();
-  }
-  draw(ctx, t) {
-    const brightness = 0.3 + 0.7 * Math.sin(this.phase + t * this.speed * 2) ** 2;
-    ctx.globalAlpha = brightness * 0.6;
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = `hsl(${this.hue}, 70%, 60%)`;
-    ctx.fillStyle = `hsl(${this.hue}, 70%, 70%)`;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-  }
-}
-const fireflies = Array.from({length: 40}, () => new Firefly());
-
-// ─── Ants ───
-class Ant {
-  constructor(x, y, targetX, targetY, payload, color) {
-    this.x = x; this.y = y;
-    this.targetX = targetX; this.targetY = targetY;
-    this.payload = payload;
-    this.color = color || '#ffd54f';
-    this.progress = 0;
-    this.speed = rand(0.3, 0.6);
-    this.wobble = rand(0, Math.PI * 2);
-    this.done = false;
-    this.startX = x; this.startY = y;
-  }
-  update(dt, t) {
-    if (this.done) return;
-    this.progress = Math.min(1, this.progress + this.speed * dt);
-    const p = ease(this.progress);
-    this.x = lerp(this.startX, this.targetX, p);
-    this.y = lerp(this.startY, this.targetY, p) + Math.sin(t * 8 + this.wobble) * 3;
-    if (this.progress >= 1) this.done = true;
-    // Leave trail particles
-    if (Math.random() < 0.3) {
-      particles.push(new Particle(this.x, this.y + 4, {
-        size: 1.2, life: 0.8, color: this.color + '88', glow: 4, gravity: 0, vx: 0, vy: 0
-      }));
-    }
-  }
-  draw(ctx, t) {
-    // Body
-    ctx.fillStyle = '#3e2723';
-    ctx.beginPath();
-    ctx.ellipse(this.x, this.y, 5, 3.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Head
-    ctx.beginPath();
-    ctx.arc(this.x + 4, this.y - 1, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-    // Legs
-    ctx.strokeStyle = '#3e2723';
-    ctx.lineWidth = 0.8;
-    for (let i = -1; i <= 1; i++) {
-      const legPhase = Math.sin(t * 12 + i * 2 + this.wobble);
-      ctx.beginPath();
-      ctx.moveTo(this.x + i * 3, this.y + 2);
-      ctx.lineTo(this.x + i * 3 + legPhase * 2, this.y + 6);
-      ctx.stroke();
-    }
-    // Payload glow
-    if (this.payload !== null) {
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = this.color;
-      ctx.fillStyle = this.color;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y - 5, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 5px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(this.payload, this.x, this.y - 3.5);
-    }
-  }
-}
-let ants = [];
-
-// ─── Trees (background) ───
-class Tree {
-  constructor(x, y, size) {
-    this.x = x; this.y = y; this.size = size;
-    this.sway = rand(0, Math.PI * 2);
-    this.swayAmt = rand(2, 6);
-    this.shade = randInt(15, 35);
-  }
-  draw(ctx, t) {
-    const sx = Math.sin(t * 0.5 + this.sway) * this.swayAmt;
-    const s = this.size;
-    // Trunk
-    ctx.fillStyle = `hsl(30, 30%, ${this.shade - 5}%)`;
-    ctx.fillRect(this.x - s * 0.08, this.y - s * 0.5, s * 0.16, s * 0.5);
-    // Canopy layers
-    for (let i = 0; i < 3; i++) {
-      const ly = this.y - s * 0.4 - i * s * 0.25;
-      const lw = s * (0.5 - i * 0.12);
-      ctx.fillStyle = `hsl(${130 + i * 10}, ${40 + i * 5}%, ${this.shade + i * 3}%)`;
-      ctx.beginPath();
-      ctx.moveTo(this.x - lw + sx * (1 + i * 0.3), ly);
-      ctx.lineTo(this.x + sx * (1.5 + i * 0.3), ly - s * 0.3);
-      ctx.lineTo(this.x + lw + sx * (1 + i * 0.3), ly);
-      ctx.fill();
-    }
-  }
-}
-const trees = [];
-function generateTrees() {
-  trees.length = 0;
-  for (let i = 0; i < 25; i++) {
-    trees.push(new Tree(rand(-50, W + 50), rand(H * 0.3, H * 0.85), rand(40, 120)));
-  }
-  trees.sort((a, b) => a.y - b.y); // depth sort
-}
-generateTrees();
-window.addEventListener('resize', generateTrees);
-
-// ─── Water Drops (for Ch2) ───
-class WaterDrop {
-  constructor(x, y, vx, vy) {
-    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
-    this.life = rand(2, 5);
-    this.maxLife = this.life;
-    this.size = rand(2, 4);
-  }
-  update(dt) {
-    this.vy += 50 * dt; // gravity
-    this.x += this.vx * dt;
-    this.y += this.vy * dt;
-    this.life -= dt;
-    if (this.life <= 0 || this.y > H) this.dead = true;
-  }
-  draw(ctx) {
-    const a = clamp(this.life / this.maxLife, 0, 1);
-    ctx.globalAlpha = a * 0.7;
-    ctx.fillStyle = '#4fc3f7';
-    ctx.shadowBlur = 6;
-    ctx.shadowColor = '#4fc3f7';
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-  }
-}
-let waterDrops = [];
-
-// ─── Render Loop ───
-let time = 0;
-let scene = 'title'; // title, ch1, ch2, ch3, ch4, ch5, victory
-let sceneData = {};
-
-function drawBackground(t) {
-  // Sky gradient
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#030a06');
-  grad.addColorStop(0.4, '#081a0e');
-  grad.addColorStop(1, '#0a1f12');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
-
-  // Ground
-  ctx.fillStyle = '#0a1a0f';
-  ctx.fillRect(0, H * 0.85, W, H * 0.15);
-  // Ground line glow
-  ctx.strokeStyle = '#1b5e2044';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, H * 0.85);
-  ctx.lineTo(W, H * 0.85);
-  ctx.stroke();
-}
-
-function frame(timestamp) {
-  const dt = Math.min(0.05, (timestamp - (frame.last || timestamp)) / 1000);
-  frame.last = timestamp;
-  time += dt;
-
-  ctx.clearRect(0, 0, W, H);
-  drawBackground(time);
-
-  // Trees
-  trees.forEach(t => t.draw(ctx, time));
-
-  // Scene-specific rendering
-  if (sceneDraw[scene]) sceneDraw[scene](dt, time);
-
-  // Ants
-  ants = ants.filter(a => { a.update(dt, time); a.draw(ctx, time); return !a.done || time - a.doneTime < 0.5; });
-  ants.forEach(a => { if (a.done && !a.doneTime) { a.doneTime = time; spawnParticles(a.x, a.y, 8, { color: a.color, spread: 0.5 }); }});
-
-  // Water
-  waterDrops = waterDrops.filter(d => { d.update(dt); if (!d.dead) d.draw(ctx); return !d.dead; });
-
-  // Particles
-  particles = particles.filter(p => { p.update(dt); if (!p.dead) p.draw(ctx); return !p.dead; });
-
-  // Fireflies
-  fireflies.forEach(f => { f.update(dt, time); f.draw(ctx, time); });
-
+// =============================================
+// MAIN LOOP
+// =============================================
+let lastT = 0;
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - lastT)/1000); lastT = ts; sceneTime += dt;
+  let sx=0, sy=0;
+  if(shakeAmt > 0.5) { sx=rand(-shakeAmt,shakeAmt); sy=rand(-shakeAmt,shakeAmt); shakeAmt*=shakeDecay; }
+  X.save(); X.translate(sx,sy);
+  drawBg(ts/1000);
+  const s = scenes[scene];
+  if(s) { if(s.update) s.update(dt, ts/1000); if(s.draw) s.draw(dt, ts/1000); }
+  particles = particles.filter(p => { if(p.update(dt)){p.draw();return true} return false; });
+  X.restore();
+  if(fadeTarget > 0) { fadeAlpha = Math.min(1, fadeAlpha + dt*3); if(fadeAlpha >= 1){fadeTarget=0; if(nextScene){activateScene(nextScene);nextScene=null;}} }
+  else if(fadeAlpha > 0) { fadeAlpha = Math.max(0, fadeAlpha - dt*2); }
+  if(fadeAlpha > 0) { X.fillStyle=`rgba(5,13,8,${fadeAlpha})`; X.fillRect(0,0,W,H); }
+  mclick = null; kpress = null;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// Scene-specific draw functions
-const sceneDraw = {};
+// =============================================
+// TITLE
+// =============================================
+scenes.title = {
+  init() {
+    bgTarget = 130; clearPanels();
+    setPanel('tp','mid',`
+      <h2 style="font-size:28px;margin-bottom:2px">🌲 The Language Forest</h2>
+      <p style="font-size:15px;color:#4a6b4d;margin-bottom:20px">discover how language models think</p>
+      <div style="text-align:center"><button class="btn btn-gold" style="font-size:16px;padding:12px 36px" onclick="setScene('ch1')">enter the forest</button></div>
+    `);
+  }
+};
+activateScene('title');
 
-/* ═══════════════════════════════════════════════════════════════
-   GAME STATE
-   ═══════════════════════════════════════════════════════════════ */
+// =============================================
+// CHAPTER 1: THE MISCOMMUNICATION
+// =============================================
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
-const NAMES = ['emma','olivia','liam','noah','ava','sophia','jackson','lucas','mia','harper','aria','ella','riley','zoey','chloe'];
-let completed = [false,false,false,false,false];
+let ch1 = {};
 
-function setPanel(html) {
-  document.getElementById('panels').innerHTML = html;
-}
+scenes.ch1 = {
+  init() {
+    bgTarget = 130; clearPanels();
+    const perm = () => { const a=ALPHA.split(''); for(let i=25;i>0;i--){const j=randInt(0,i+1);[a[i],a[j]]=[a[j],a[i]];} return a; };
+    const cbA = {}, cbB = {};
+    const permA = perm(), permB = perm();
+    for(let i=0;i<26;i++) { cbA[ALPHA[i]] = i; cbB[permB[i]] = i; }
+    const word = ['hello','world','emma','forest','river'][randInt(0,5)];
+    const encoded = word.split('').map(c => cbA[c]);
+    const decoded = encoded.map(n => { for(let c in cbB) if(cbB[c]===n) return c; return '?'; }).join('');
+    ch1 = { phase:1, cbA, cbB, word, encoded, decoded, ants:[], antsDone:false, showMismatch:false,
+            sharedCB:{}, fixCount:0,
+            bpeWord:'the cat sat on the mat', bpeTokens:[], mergeCount:0 };
+    ch1.ants = encoded.map((n,i) => ({
+      n, fromChar: word[i], toChar: decoded[i],
+      x: W*0.15, y: H*0.5 + (i-2)*30,
+      tx: W*0.85, ty: H*0.5 + (i-2)*30,
+      progress: 0, arrived: false, delay: i*0.35
+    }));
+    tip('two ant colonies need to talk. <span class="hl">click anywhere</span> to send the message.');
+  },
 
-function updateHud(chapterName) {
-  const hud = document.getElementById('hud');
-  hud.style.display = 'flex';
-  document.getElementById('hud-chapter').textContent = chapterName;
-  const icons = ['🐜','🏔️','🌳','🏘️','🔮'];
-  document.getElementById('hud-dots').innerHTML = icons.map((ic, i) =>
-    `<div class="hud-dot ${completed[i] ? 'done' : ''} ${scene === 'ch'+(i+1) ? 'active' : ''}" title="Ch${i+1}">${ic}</div>`
-  ).join('');
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   TITLE SCREEN
-   ═══════════════════════════════════════════════════════════════ */
-function showTitle() {
-  scene = 'title';
-  document.getElementById('hud').style.display = 'none';
-  setPanel(`
-    <div class="panel panel-center" style="text-align:center; max-width:560px;">
-      <h2 style="font-size:36px; margin-bottom:4px;">🌲 The Language Forest</h2>
-      <p style="font-size:16px; color:#6b8f6e; margin-bottom:24px;">Build a language model from scratch — no code, just intuition</p>
-      <div style="display:grid; gap:8px; text-align:left; margin-bottom:24px;">
-        ${['🐜 The Ant Trail — turn messages into codes',
-           '🏔️ The River Network — trace cause and effect',
-           '🌳 The Whispering Trees — learn to pay attention',
-           '🏘️ The Village Elder — learn from mistakes',
-           '🔮 The Oracle Speaks — create something new'
-        ].map(t => `<div style="padding:8px 12px; background:rgba(102,187,106,0.06); border-radius:8px; font-size:14px;">${t}</div>`).join('')}
-      </div>
-      <button class="btn btn-gold" onclick="startCh1()" style="font-size:17px; padding:14px 40px;">🌱 Enter the Forest</button>
-    </div>
-  `);
-}
-showTitle();
-
-/* ═══════════════════════════════════════════════════════════════
-   CHAPTER 1: THE ANT TRAIL (TOKENIZER)
-   ═══════════════════════════════════════════════════════════════ */
-let ch1 = { codebook: {}, nextId: 0, stage: 0, word: '', target: [], pos: 0, decodeWord: '' };
-
-function startCh1() {
-  scene = 'ch1';
-  ch1 = { codebook: {}, nextId: 0, stage: 1, word: '', target: [], pos: 0, decodeWord: '' };
-  updateHud('🐜 Chapter 1: The Ant Trail');
-  ch1ShowStage1();
-}
-
-function ch1ShowStage1() {
-  ch1.stage = 1;
-  setPanel(`
-    <div class="panel">
-      <h2>🐜 Build the Scent Codebook</h2>
-      <p>Ants communicate with <span class="highlight">scent codes</span>. Each letter needs a unique number. <strong>Click letters</strong> to assign them — watch the ants carry each one to the codebook stone!</p>
-      <div class="cb-grid" id="cb-grid">
-        ${ALPHA.split('').map(c => `<div class="cb-cell" id="cb-${c}" onclick="ch1Assign('${c}')"><span class="letter">${c}</span><span class="num" id="cbn-${c}"></span></div>`).join('')}
-      </div>
-      <p style="text-align:center; font-size:13px; color:#6b8f6e;" id="cb-status">Click any letter to begin — ${26 - ch1.nextId} remaining</p>
-      <div id="cb-next" style="text-align:center; display:none;">
-        <button class="btn btn-green" onclick="ch1ShowStage2()">Continue → Encode a Message</button>
-      </div>
-    </div>
-  `);
-}
-
-function ch1Assign(c) {
-  if (ch1.codebook[c] !== undefined) return;
-  ch1.codebook[c] = ch1.nextId;
-  const cell = document.getElementById(`cb-${c}`);
-  cell.classList.add('assigned');
-  document.getElementById(`cbn-${c}`).textContent = ch1.nextId;
-
-  // Spawn ant carrying this assignment
-  const rect = cell.getBoundingClientRect();
-  const ax = rect.left + rect.width/2;
-  const ay = rect.top + rect.height/2;
-  // Destination: top of screen (codebook stone)
-  ants.push(new Ant(ax, ay, W/2 + rand(-100, 100), H * 0.2, ch1.nextId, `hsl(${ch1.nextId * 14}, 70%, 60%)`));
-  spawnParticles(ax, ay, 6, { color: '#66bb6a', spread: 0.4, glow: 10 });
-
-  ch1.nextId++;
-  document.getElementById('cb-status').textContent = ch1.nextId === 26
-    ? '✅ All letters assigned!'
-    : `${26 - ch1.nextId} letters remaining`;
-
-  if (ch1.nextId === 26) {
-    document.getElementById('cb-next').style.display = 'block';
-    spawnParticles(W/2, H/2, 30, { color: '#ffd54f', spread: 2, glow: 15, sizeMul: 1.5 });
-  }
-}
-
-function ch1RenderCodebookRef() {
-  const entries = Object.entries(ch1.codebook).sort((a,b) => a[1] - b[1]);
-  return `<div class="cb-grid" style="gap:3px;">
-    ${entries.map(([c, id]) => {
-      const isActive = ch1.stage === 2 && ch1.pos < ch1.target.length &&
-        ((ch1.target[ch1.pos] === 26 && false) || ch1.codebook[c] === ch1.target[ch1.pos]);
-      return `<div class="cb-cell ${isActive ? 'glow' : 'assigned'}" style="width:34px;height:40px;cursor:default">
-        <span class="letter" style="font-size:14px">${c}</span>
-        <span class="num" style="font-size:10px">${id}</span>
-      </div>`;
-    }).join('')}
-    <div class="cb-cell ${ch1.stage === 2 && ch1.pos < ch1.target.length && ch1.target[ch1.pos] === 26 ? 'glow' : 'assigned'}" style="width:46px;height:40px;cursor:default;border-color:#ffd54f">
-      <span class="letter" style="font-size:11px;color:#ffd54f">BOS</span>
-      <span class="num" style="font-size:10px">26</span>
-    </div>
-  </div>`;
-}
-
-function ch1ShowStage2() {
-  ch1.stage = 2;
-  ch1.word = NAMES[randInt(0, NAMES.length)];
-  ch1.target = [26, ...ch1.word.split('').map(c => ch1.codebook[c]), 26];
-  ch1.pos = 0;
-  ch1RenderStage2();
-}
-
-function ch1RenderStage2() {
-  const labels = ['⟨BOS⟩', ...ch1.word.split(''), '⟨BOS⟩'];
-  const seqHtml = labels.map((label, i) => {
-    const cls = i < ch1.pos ? 'done' : i === ch1.pos ? 'active' : 'waiting';
-    const num = i < ch1.pos ? ch1.target[i] : (i === ch1.pos ? '?' : '');
-    return `<div class="seq-slot ${cls}"><span class="s-char">${label}</span><span class="s-num">${num}</span></div>`;
-  }).join('');
-
-  const numpadHtml = Array.from({length:27}, (_, i) =>
-    `<div class="numpad-btn" id="np-${i}" onclick="ch1Pick(${i})">${i}</div>`
-  ).join('');
-
-  setPanel(`
-    <div class="panel">
-      <h2>🐜 Encode: <span class="highlight">${ch1.word}</span></h2>
-      <p>Click the correct scent number for each position. Messages always start and end with <span class="highlight">⟨BOS⟩ = 26</span>.</p>
-      <details open style="margin:8px 0;">
-        <summary style="cursor:pointer; color:#ffd54f; font-size:13px; font-weight:600;">📖 Codebook Reference</summary>
-        ${ch1RenderCodebookRef()}
-      </details>
-      <div class="seq-display">${seqHtml}</div>
-      <div class="numpad">${numpadHtml}</div>
-      <div id="ch1-msg"></div>
-    </div>
-  `);
-}
-
-function ch1Pick(n) {
-  if (ch1.pos >= ch1.target.length) return;
-  if (n === ch1.target[ch1.pos]) {
-    spawnParticles(W/2, H * 0.7, 5, { color: '#66bb6a', spread: 0.3 });
-    ch1.pos++;
-    if (ch1.pos >= ch1.target.length) {
-      spawnParticles(W/2, H/2, 25, { color: '#ffd54f', spread: 1.5, glow: 15 });
-      setTimeout(() => ch1ShowStage3(), 800);
+  update(dt, t) {
+    // Phase 1: click to start ants marching
+    if(ch1.phase === 1 && !ch1.started && mclick) {
+      ch1.started = true;
     }
-    ch1RenderStage2();
-  } else {
-    const btn = document.getElementById(`np-${n}`);
-    btn.classList.add('wrong');
-    setTimeout(() => btn.classList.remove('wrong'), 350);
+  },
+
+  draw(dt, t) {
+    X.font = 'bold 14px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#66bb6a'; X.fillText('Colony A', W*0.15, H*0.3);
+    X.fillStyle = '#4fc3f7'; X.fillText('Colony B', W*0.85, H*0.3);
+
+    if(ch1.phase === 1) this.drawPhase1(dt, t);
+    else if(ch1.phase === 2) this.drawPhase2(dt, t);
+    else if(ch1.phase === 3) this.drawPhase3(dt, t);
+  },
+
+  drawPhase1(dt, t) {
+    const w = ch1.word, d = ch1.decoded;
+    X.font = 'bold 24px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#e8f5e9'; X.fillText('"'+w+'"', W*0.15, H*0.38);
+
+    if(!ch1.started) return;
+
+    let allArrived = true;
+    ch1.ants.forEach((a, i) => {
+      if(sceneTime < a.delay + 0.3) { allArrived = false; return; }
+      const elapsed = sceneTime - a.delay - 0.3;
+      a.progress = clamp(elapsed / 1.8, 0, 1);
+      const p = ease(a.progress);
+      const cx = lerp(a.x, a.tx, p);
+      const cy = a.y + Math.sin(t*6+i)*4;
+      if(a.progress < 1) allArrived = false;
+      else a.arrived = true;
+
+      X.fillStyle = '#5d4037';
+      X.beginPath(); X.ellipse(cx,cy,6,4,0,0,Math.PI*2); X.fill();
+      const orbCol = 'hsl('+(a.n*14)+',70%,60%)';
+      X.shadowBlur=8; X.shadowColor=orbCol; X.fillStyle=orbCol;
+      X.beginPath(); X.arc(cx,cy-8,5,0,Math.PI*2); X.fill(); X.shadowBlur=0;
+      X.fillStyle='#000'; X.font='bold 7px sans-serif'; X.textAlign='center';
+      X.fillText(a.n, cx, cy-6);
+      if(a.progress < 1 && Math.random()<0.2) particles.push(new P(cx,cy+4,{sz:1,life:0.5,col:orbCol+'66',gl:4}));
+    });
+
+    if(allArrived && !ch1.antsDone) {
+      ch1.antsDone = true;
+      shake(6);
+      burst(W*0.85, H*0.45, 15, {col:'#ef5350', sp:0.8});
+      tip('the message arrived as <span style="color:#ef5350;font-weight:700">"'+d+'"</span> — wrong! <span class="hl">hover over the ants</span> to see why.');
+    }
+
+    if(ch1.antsDone) {
+      X.font = 'bold 24px sans-serif'; X.textAlign = 'center';
+      X.fillStyle = '#ef5350'; X.fillText('"'+d+'"', W*0.85, H*0.38);
+      X.font = '16px sans-serif'; X.fillStyle = '#ef535088'; X.fillText('wrong!', W*0.85, H*0.44);
+
+      ch1.ants.forEach((a, i) => {
+        if(dist(mx,my,a.tx,a.ty) < 30) {
+          X.fillStyle = 'rgba(10,26,15,0.92)';
+          const bx = clamp(mx+10, 0, W-190), by = clamp(my-50, 0, H-60);
+          X.fillRect(bx, by, 185, 55);
+          X.strokeStyle = '#ffd54f'; X.lineWidth=1; X.strokeRect(bx, by, 185, 55);
+          X.font = '12px sans-serif'; X.textAlign = 'left';
+          X.fillStyle = '#66bb6a'; X.fillText('Colony A: "'+a.fromChar+'" = scent '+a.n, bx+10, by+18);
+          X.fillStyle = '#ef5350'; X.fillText('Colony B: scent '+a.n+' = "'+a.toChar+'"', bx+10, by+34);
+          X.fillStyle = '#ffd54f'; X.font = '11px sans-serif';
+          X.fillText('different codebooks!', bx+10, by+48);
+          if(!ch1.showMismatch) { ch1.showMismatch = true;
+            setTimeout(()=>tip('they have <span class="hl">different codebooks</span>! same number, different letter. <button class="btn btn-green" style="padding:6px 16px;font-size:12px;margin-left:8px" onclick="ch1StartFix()">fix it</button>'), 500);
+          }
+        }
+      });
+    }
+  },
+
+  drawPhase2(dt, t) {
+    const cols = 13, cellW = 28, cellH = 32, gap = 2;
+    const startXA = W*0.05, startXB = W*0.55, startY = H*0.3;
+
+    X.font = 'bold 12px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#66bb6a'; X.fillText("Colony A's codebook", W*0.25, startY-10);
+    X.fillStyle = '#4fc3f7'; X.fillText("Colony B's codebook", W*0.75, startY-10);
+
+    ALPHA.split('').forEach((c, i) => {
+      const row = Math.floor(i/cols), col = i%cols;
+      const xA = startXA + col*(cellW+gap), yA = startY + row*(cellH+gap);
+      const xB = startXB + col*(cellW+gap), yB = startY + row*(cellH+gap);
+      const fixed = ch1.sharedCB[c] !== undefined;
+
+      X.fillStyle = fixed ? 'rgba(102,187,106,0.15)' : 'rgba(102,187,106,0.05)';
+      X.fillRect(xA,yA,cellW,cellH);
+      X.strokeStyle = fixed ? '#66bb6a' : '#1b5e20'; X.lineWidth=1; X.strokeRect(xA,yA,cellW,cellH);
+      X.fillStyle = '#e8f5e9'; X.font = 'bold 13px sans-serif'; X.fillText(c, xA+cellW/2, yA+14);
+      X.fillStyle = '#ffd54f'; X.font = '10px sans-serif'; X.fillText(ch1.cbA[c], xA+cellW/2, yA+26);
+
+      X.fillStyle = fixed ? 'rgba(79,195,247,0.15)' : 'rgba(79,195,247,0.05)';
+      X.fillRect(xB,yB,cellW,cellH);
+      X.strokeStyle = fixed ? '#4fc3f7' : '#1b5e2066'; X.lineWidth=1; X.strokeRect(xB,yB,cellW,cellH);
+      X.fillStyle = '#e8f5e9'; X.font = 'bold 13px sans-serif'; X.fillText(c, xB+cellW/2, yB+14);
+      X.fillStyle = '#ffd54f'; X.font = '10px sans-serif'; X.fillText(ch1.cbB[c], xB+cellW/2, yB+26);
+
+      if(!fixed && mx>xA && mx<xA+cellW && my>yA && my<yA+cellH) {
+        X.strokeStyle = '#ffd54f'; X.lineWidth=2; X.strokeRect(xA-1,yA-1,cellW+2,cellH+2);
+      }
+    });
+
+    const sharedY = H*0.72;
+    X.fillStyle = '#ffd54f'; X.font = 'bold 13px sans-serif'; X.textAlign = 'center';
+    X.fillText('shared codebook: '+ch1.fixCount+'/26', W/2, sharedY);
+    X.fillStyle = '#1b5e20'; X.fillRect(W*0.3, sharedY+8, W*0.4, 8);
+    X.fillStyle = '#66bb6a'; X.fillRect(W*0.3, sharedY+8, W*0.4*(ch1.fixCount/26), 8);
+
+    if(mclick) {
+      ALPHA.split('').forEach((c, i) => {
+        if(ch1.sharedCB[c] !== undefined) return;
+        const row = Math.floor(i/cols), col = i%cols;
+        const xA = startXA + col*(cellW+gap), yA = startY + row*(cellH+gap);
+        if(mclick.x>xA && mclick.x<xA+cellW && mclick.y>yA && mclick.y<yA+cellH) {
+          ch1.sharedCB[c] = ch1.cbA[c];
+          ch1.fixCount++;
+          burst(xA+cellW/2, yA+cellH/2, 5, {col:'#66bb6a',sp:0.3});
+          if(ch1.fixCount >= 26) {
+            burst(W/2, H/2, 30, {col:'#ffd54f',sp:2,gl:15,sm:1.5});
+            setTimeout(() => ch1StartBPE(), 600);
+          }
+        }
+      });
+    }
+  },
+
+  drawPhase3(dt, t) {
+    const tokens = ch1.bpeTokens;
+    const maxVisible = Math.min(tokens.length, Math.floor((W*0.85)/44));
+    const tokenW = Math.min(44, (W*0.85)/tokens.length);
+    const startX = (W - tokens.length*tokenW)/2;
+    const y = H*0.4;
+
+    // Ant counter
+    X.font = 'bold 16px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#6b8f6e';
+    X.fillText('ants needed: '+tokens.length, W/2, H*0.22);
+    // Original count
+    X.font = '12px sans-serif'; X.fillStyle = '#4a6b4d';
+    X.fillText('(started with '+ch1.bpeWord.length+')', W/2, H*0.26);
+
+    tokens.forEach((tok, i) => {
+      const x = startX + i*tokenW;
+      const bounce = Math.sin(t*3+i*0.5)*3;
+      // Ant
+      X.fillStyle = '#5d4037';
+      X.beginPath(); X.ellipse(x+tokenW/2, y+24+bounce, 4, 2.5, 0, 0, Math.PI*2); X.fill();
+      // Token orb
+      const col = tok.length > 1 ? '#ffd54f' : '#4fc3f7';
+      const orbW = Math.max(tokenW-6, 20);
+      X.shadowBlur=6; X.shadowColor=col; X.fillStyle=col+'22';
+      X.fillRect(x+3, y-4+bounce, orbW, 22); X.shadowBlur=0;
+      X.strokeStyle=col+'88'; X.lineWidth=1; X.strokeRect(x+3, y-4+bounce, orbW, 22);
+      X.fillStyle='#e8f5e9'; X.font='bold '+(tok.length>2?'9':'11')+'px sans-serif'; X.textAlign='center';
+      X.fillText(tok, x+tokenW/2, y+12+bounce);
+    });
+
+    // Merge zones
+    for(let i=0;i<tokens.length-1;i++) {
+      const x = startX + (i+1)*tokenW;
+      const hover = mx > x-10 && mx < x+10 && my > y-20 && my < y+40;
+      if(hover) {
+        X.fillStyle = 'rgba(255,213,79,0.15)';
+        X.fillRect(startX+i*tokenW, y-10, tokenW*2, 40);
+        X.strokeStyle = '#ffd54f44'; X.setLineDash([3,3]); X.lineWidth=1;
+        X.strokeRect(startX+i*tokenW, y-10, tokenW*2, 40);
+        X.setLineDash([]);
+        X.font = '14px sans-serif'; X.fillStyle = '#ffd54f'; X.textAlign = 'center';
+        X.fillText('merge', x, y-14);
+      }
+      if(mclick && mclick.x>x-10 && mclick.x<x+10 && mclick.y>y-20 && mclick.y<y+40) {
+        const merged = tokens[i] + tokens[i+1];
+        tokens.splice(i, 2, merged);
+        ch1.mergeCount++;
+        burst(x, y+10, 10, {col:'#ffd54f',sp:0.5});
+        if(tokens.length <= Math.ceil(ch1.bpeWord.length * 0.5)) {
+          setTimeout(() => ch1ShowAha(), 500);
+        }
+      }
+    }
   }
+};
+
+function ch1StartFix() {
+  ch1.phase = 2; clearPanels();
+  tip('click letters in Colony A to agree on their codes. build a <span class="hl">shared codebook</span>.');
 }
 
-function ch1ShowStage3() {
-  ch1.stage = 3;
-  ch1.decodeWord = NAMES.filter(n => n !== ch1.word)[randInt(0, 10)];
-  const tokens = [26, ...ch1.decodeWord.split('').map(c => ch1.codebook[c]), 26];
-
-  const seqHtml = tokens.map(t =>
-    `<div class="seq-slot done" style="border-color:#4fc3f7; background:rgba(79,195,247,0.1)">
-      <span class="s-num" style="color:#4fc3f7; font-size:18px;">${t}</span>
-    </div>`
-  ).join('');
-
-  setPanel(`
-    <div class="panel">
-      <h2>🐜 Decode the Scent Trail</h2>
-      <p>An ant patrol returned with this sequence. What name did they carry?</p>
-      <details open style="margin:8px 0;">
-        <summary style="cursor:pointer; color:#ffd54f; font-size:13px; font-weight:600;">📖 Codebook Reference</summary>
-        ${ch1RenderCodebookRef()}
-      </details>
-      <div class="seq-display">${seqHtml}</div>
-      <div style="text-align:center; margin:12px 0;">
-        <input type="text" id="decode-in" placeholder="Type the name..."
-          style="padding:10px 16px; font-size:18px; border-radius:8px; border:2px solid #1b5e20; background:#0a1a0f; color:#e8f5e9; text-align:center; width:180px;"
-          onkeydown="if(event.key==='Enter')ch1CheckDecode()">
-        <button class="btn btn-green" onclick="ch1CheckDecode()" style="margin-left:6px;">Check</button>
-      </div>
-      <div id="ch1-msg"></div>
-    </div>
-  `);
-  // Spawn ants carrying the scent trail visually
-  tokens.forEach((t, i) => {
-    setTimeout(() => {
-      ants.push(new Ant(W + 20, H * 0.4, W * 0.3 + i * 40, H * 0.6, t, '#4fc3f7'));
-    }, i * 300);
-  });
-}
-
-function ch1CheckDecode() {
-  const input = document.getElementById('decode-in').value.trim().toLowerCase();
-  const msg = document.getElementById('ch1-msg');
-  if (input === ch1.decodeWord) {
-    spawnParticles(W/2, H/2, 40, { color: '#ffd54f', spread: 2, glow: 20, sizeMul: 1.5 });
-    msg.innerHTML = `<div class="msg msg-ok">✅ Correct! The ants said "${ch1.decodeWord}"!</div>`;
-    setTimeout(() => ch1ShowAha(), 600);
-  } else {
-    msg.innerHTML = `<div class="msg msg-err">Not quite — use the codebook above!</div>`;
-  }
+function ch1StartBPE() {
+  ch1.phase = 3; clearPanels();
+  ch1.bpeTokens = ch1.bpeWord.split('');
+  tip(ch1.bpeTokens.length+' ants for one sentence! <span class="hl">click between letters</span> to merge them. fewer ants = faster.');
 }
 
 function ch1ShowAha() {
-  setPanel(`
-    <div class="panel">
-      <h2>💡 You just built a Tokenizer!</h2>
-      <div class="aha">
-        <strong>In real LLMs:</strong><br>
-        Your <span class="real">codebook</span> = the tokenizer's vocabulary<br>
-        Your <span class="real">scent numbers</span> = token IDs<br>
-        The <span class="real">⟨BOS⟩</span> = special boundary tokens<br><br>
-        ChatGPT uses ~100,000 tokens representing word chunks ("the", "ing") instead of single characters. Same idea, bigger scale.
-      </div>
-      <div style="text-align:center; margin-top:14px;">
-        <button class="btn btn-gold" onclick="completeCh(1)">🏆 Chapter Complete →</button>
-      </div>
+  clearPanels();
+  setPanel('ch1aha','mid',`
+    <h2>you just built a tokenizer</h2>
+    <div class="aha-box">
+      the <strong>miscommunication</strong> = why every model needs a fixed vocabulary<br>
+      the <strong>shared codebook</strong> = the tokenizer's vocabulary (token to ID)<br>
+      <strong>merging pairs</strong> = Byte-Pair Encoding (BPE) — exactly how GPT builds its vocabulary<br>
+      <span class="r">GPT-4 uses ~100K merged tokens instead of single characters. same idea, bigger scale.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[0]=true;setScene('ch2')">continue</button>
     </div>
   `);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   CHAPTER 2: THE RIVER NETWORK (GRADIENTS)
-   ═══════════════════════════════════════════════════════════════ */
-let ch2 = { gates: [1.5, 0.8, 1.0], target: 8.5, rain: [3, 2], solved: false };
+// =============================================
+// CHAPTER 2: BLIND DESCENT
+// =============================================
+let ch2 = {};
 
-// River network nodes for rendering
-const riverNodes = () => [
-  { id: 'r1', x: W*0.1, y: H*0.18, label: '🌧️', val: ch2.rain[0], color: '#4fc3f7', type: 'rain' },
-  { id: 'r2', x: W*0.1, y: H*0.52, label: '🌧️', val: ch2.rain[1], color: '#4fc3f7', type: 'rain' },
-  { id: 'g1', x: W*0.32, y: H*0.18, label: '⛩️', val: ch2.rain[0]*ch2.gates[0], color: '#66bb6a', type: 'gate', gi: 0 },
-  { id: 'g2', x: W*0.32, y: H*0.52, label: '⛩️', val: ch2.rain[1]*ch2.gates[1], color: '#66bb6a', type: 'gate', gi: 1 },
-  { id: 'm',  x: W*0.55, y: H*0.35, label: '🔀', val: ch2.rain[0]*ch2.gates[0]+ch2.rain[1]*ch2.gates[1], color: '#b39ddb', type: 'merge' },
-  { id: 'g3', x: W*0.75, y: H*0.35, label: '⛩️', val: (ch2.rain[0]*ch2.gates[0]+ch2.rain[1]*ch2.gates[1])*ch2.gates[2], color: '#66bb6a', type: 'gate', gi: 2 },
-];
-const riverEdges = [[0,2],[1,3],[2,4],[3,4],[4,5]];
+function makeTerrain() {
+  const bumps = [
+    {x:0.25,y:0.3,h:3.5,s:0.02}, {x:0.7,y:0.2,h:2.8,s:0.025},
+    {x:0.15,y:0.7,h:2.0,s:0.015}, {x:0.8,y:0.75,h:1.5,s:0.02},
+    {x:0.5,y:0.5,h:-1.5,s:0.012},
+    {x:0.75,y:0.65,h:-4.0,s:0.018},
+  ];
+  return (x,y) => {
+    let v = 2;
+    bumps.forEach(b => v += b.h * Math.exp(-((x-b.x)**2+(y-b.y)**2)/b.s));
+    v += Math.sin(x*12)*Math.cos(y*10)*0.15;
+    return v;
+  };
+}
 
-sceneDraw.ch2 = function(dt, t) {
-  const nodes = riverNodes();
-  // Draw river flows
-  riverEdges.forEach(([a,b]) => {
-    const na = nodes[a], nb = nodes[b];
-    const flow = Math.min(na.val, nb.val);
-    const width = clamp(flow * 1.5 + 1, 1, 14);
-    // Animated dashes
-    ctx.strokeStyle = `rgba(79,195,247,${clamp(flow/6, 0.15, 0.7)})`;
-    ctx.lineWidth = width;
-    ctx.setLineDash([8, 6]);
-    ctx.lineDashOffset = -t * 40;
-    ctx.beginPath();
-    ctx.moveTo(na.x, na.y);
-    ctx.quadraticCurveTo((na.x+nb.x)/2, (na.y+nb.y)/2 + 15, nb.x, nb.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    // Spawn water drops along flow
-    if (Math.random() < flow * 0.04) {
-      const frac = Math.random();
-      const px = lerp(na.x, nb.x, frac);
-      const py = lerp(na.y, nb.y, frac) + rand(-5, 5);
-      waterDrops.push(new WaterDrop(px, py, rand(-3, 3), rand(-15, 5)));
+scenes.ch2 = {
+  init() {
+    bgTarget = 200; clearPanels();
+    const terrain = makeTerrain();
+    const tileSize = 4;
+    const cols = Math.ceil(W/tileSize), rows = Math.ceil(H/tileSize);
+    const offC = document.createElement('canvas');
+    offC.width = W; offC.height = H;
+    const oX = offC.getContext('2d');
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) {
+      const nx = c/cols, ny = r/rows;
+      const v = terrain(nx, ny);
+      const tt = clamp((v+2)/6, 0, 1);
+      let r2,g2,b2;
+      if(tt < 0.3) { r2=20; g2=lerp(200,100,tt/0.3); b2=lerp(220,180,tt/0.3); }
+      else if(tt < 0.6) { r2=lerp(20,200,(tt-0.3)/0.3); g2=lerp(100,200,(tt-0.3)/0.3); b2=lerp(180,50,(tt-0.3)/0.3); }
+      else { r2=lerp(200,230,(tt-0.6)/0.4); g2=lerp(200,60,(tt-0.6)/0.4); b2=lerp(50,40,(tt-0.6)/0.4); }
+      oX.fillStyle = `rgb(${r2|0},${g2|0},${b2|0})`;
+      oX.fillRect(c*tileSize, r*tileSize, tileSize, tileSize);
     }
-  });
+    const fogC = document.createElement('canvas');
+    fogC.width = W; fogC.height = H;
+    const fX = fogC.getContext('2d');
+    fX.fillStyle = '#050d08'; fX.fillRect(0,0,W,H);
 
-  // Draw nodes
-  nodes.forEach(n => {
-    // Glow
-    ctx.shadowBlur = 15;
-    ctx.shadowColor = n.color;
-    ctx.fillStyle = n.color + '22';
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, 28, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // Border
-    ctx.strokeStyle = n.color + '66';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    // Icon
-    ctx.font = '20px serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(n.label, n.x, n.y + 2);
-    // Value
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = n.color;
-    ctx.fillText(n.val.toFixed(1), n.x, n.y + 22);
-    // Gate multiplier label
-    if (n.type === 'gate') {
-      ctx.font = '11px sans-serif';
-      ctx.fillStyle = '#ffd54f';
-      ctx.fillText(`×${ch2.gates[n.gi].toFixed(1)}`, n.x, n.y - 22);
+    ch2 = { terrain, offC, fogC, fX,
+      px: W*0.2, py: H*0.3,
+      vx:0, vy:0, momentum: false, trail:[],
+      globalMin: {x:0.75*W, y:0.65*H}, found:false, stuckTime:0, showMomentum:false };
+    tip('you are lost in fog on a mountain. <span class="hl">click and drag</span> to walk. find the lowest valley.');
+    ch2.fX.globalCompositeOperation = 'destination-out';
+    const gr = ch2.fX.createRadialGradient(ch2.px,ch2.py,0,ch2.px,ch2.py,50);
+    gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    ch2.fX.fillStyle = gr;
+    ch2.fX.beginPath(); ch2.fX.arc(ch2.px,ch2.py,50,0,Math.PI*2); ch2.fX.fill();
+    ch2.fX.globalCompositeOperation = 'source-over';
+  },
+
+  update(dt, t) {
+    const c = ch2;
+    if(c.found) return;
+    const speed = c.momentum ? 200 : 120;
+    const friction = c.momentum ? 0.97 : 0.85;
+
+    if(mdown) {
+      const dx = mx - c.px, dy = my - c.py;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if(d > 5) { c.vx += (dx/d)*speed*dt; c.vy += (dy/d)*speed*dt; }
     }
-  });
 
-  // Ocean
-  const ocean = nodes[5].val;
-  const oceanX = W * 0.88, oceanY = H * 0.35;
-  const fillH = clamp(ocean / 15, 0, 1) * 60;
-  ctx.fillStyle = 'rgba(79,195,247,0.08)';
-  ctx.fillRect(oceanX - 30, oceanY - 30, 60, 60);
-  ctx.fillStyle = 'rgba(79,195,247,0.25)';
-  ctx.fillRect(oceanX - 30, oceanY + 30 - fillH, 60, fillH);
-  ctx.strokeStyle = '#4fc3f7';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(oceanX - 30, oceanY - 30, 60, 60);
-  ctx.font = '24px serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('🌊', oceanX, oceanY + 6);
-  ctx.font = 'bold 14px sans-serif';
-  ctx.fillStyle = '#4fc3f7';
-  ctx.fillText(ocean.toFixed(1), oceanX, oceanY + 42);
-  // Target
-  ctx.fillStyle = '#ffd54f';
-  ctx.font = '12px sans-serif';
-  ctx.fillText(`Target: ${ch2.target}`, oceanX, oceanY + 56);
-};
+    const nx = c.px/W, ny = c.py/H, eps = 0.003;
+    const gx = (c.terrain(nx+eps,ny) - c.terrain(nx-eps,ny)) / (2*eps);
+    const gy = (c.terrain(nx,ny+eps) - c.terrain(nx,ny-eps)) / (2*eps);
+    c.vx -= gx * 15 * dt;
+    c.vy -= gy * 15 * dt;
+    c.vx *= friction; c.vy *= friction;
+    c.px = clamp(c.px + c.vx*dt, 20, W-20);
+    c.py = clamp(c.py + c.vy*dt, 20, H-20);
 
-function startCh2() {
-  scene = 'ch2';
-  ch2 = { gates: [1.5, 0.8, 1.0], target: 8.5, rain: [3, 2], solved: false };
-  updateHud('🏔️ Chapter 2: The River Network');
-  ch2Render();
-}
+    c.fX.globalCompositeOperation = 'destination-out';
+    const revealR = c.momentum ? 60 : 40;
+    const gr = c.fX.createRadialGradient(c.px,c.py,0,c.px,c.py,revealR);
+    gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    c.fX.fillStyle = gr;
+    c.fX.beginPath(); c.fX.arc(c.px,c.py,revealR,0,Math.PI*2); c.fX.fill();
+    c.fX.globalCompositeOperation = 'source-over';
 
-function ch2Render() {
-  const ocean = (ch2.rain[0]*ch2.gates[0] + ch2.rain[1]*ch2.gates[1]) * ch2.gates[2];
-  const diff = Math.abs(ocean - ch2.target);
+    c.trail.push({x:c.px,y:c.py});
+    if(c.trail.length > 500) c.trail.shift();
 
-  setPanel(`
-    <div class="panel" style="max-width:500px;">
-      <h2>🏔️ Control the River</h2>
-      <p>Rain flows through <span class="highlight">gates</span> that multiply the flow. Adjust them to make the ocean hit <span class="highlight">${ch2.target}</span>.</p>
-      ${ch2.gates.map((g, i) => `
-        <div class="range-row">
-          <label>⛩️ Gate ${i+1}:</label>
-          <input type="range" min="0" max="300" value="${g*100}" oninput="ch2SetGate(${i},this.value)">
-          <span class="rv" id="g2v-${i}">${g.toFixed(1)}</span>
-        </div>
-      `).join('')}
-      <p style="text-align:center; margin-top:8px;">
-        🌊 Ocean: <strong style="color:#4fc3f7">${ocean.toFixed(1)}</strong>
-        &nbsp;│&nbsp; 🎯 Target: <strong style="color:#ffd54f">${ch2.target}</strong>
-        &nbsp;│&nbsp; Off by: <strong style="color:${diff < 0.3 ? '#66bb6a' : '#ef5350'}">${diff.toFixed(1)}</strong>
-      </p>
-      <div style="text-align:center; margin-top:10px;">
-        <button class="btn btn-green" onclick="ch2Check()">Check Level</button>
-      </div>
-      <div id="ch2-msg"></div>
-    </div>
-  `);
-}
+    const vel = Math.sqrt(c.vx*c.vx+c.vy*c.vy);
+    const atGlobal = dist(c.px,c.py,c.globalMin.x,c.globalMin.y) < 40;
+    if(vel < 3 && !mdown && !atGlobal) {
+      c.stuckTime += dt;
+      if(c.stuckTime > 2.5 && !c.showMomentum) {
+        c.showMomentum = true;
+        tip('stuck in a <span style="color:#ef5350">local minimum</span>! press <span class="hl">M</span> for momentum to roll through small valleys.');
+      }
+    } else { c.stuckTime = 0; }
 
-function ch2SetGate(i, val) {
-  ch2.gates[i] = val / 100;
-  document.getElementById(`g2v-${i}`).textContent = (val/100).toFixed(1);
-  // Update ocean display
-  ch2Render();
-}
+    if(atGlobal) {
+      c.found = true;
+      burst(c.px, c.py, 40, {col:'#4fc3f7',sp:2,gl:20,sm:1.5,lm:2});
+      setTimeout(() => ch2ShowAha(), 500);
+    }
 
-function ch2Check() {
-  const ocean = (ch2.rain[0]*ch2.gates[0] + ch2.rain[1]*ch2.gates[1]) * ch2.gates[2];
-  const diff = Math.abs(ocean - ch2.target);
-  if (diff < 0.3) {
-    spawnParticles(W*0.88, H*0.35, 30, { color: '#4fc3f7', spread: 1.5, glow: 15 });
-    ch2ShowAha();
-  } else {
-    document.getElementById('ch2-msg').innerHTML = `<div class="msg msg-err">Off by ${diff.toFixed(1)} — ${ocean > ch2.target ? 'reduce' : 'increase'} some gates!</div>`;
+    if(kpress === 'm' || kpress === 'M') {
+      c.momentum = !c.momentum;
+      tip(c.momentum ? '<span class="gr">momentum ON</span> — you carry inertia now. build speed!' : 'momentum off.');
+    }
+  },
+
+  draw(dt, t) {
+    const c = ch2;
+    X.drawImage(c.offC, 0, 0);
+    X.drawImage(c.fogC, 0, 0);
+
+    if(c.trail.length > 1) {
+      X.strokeStyle = 'rgba(255,213,79,0.25)'; X.lineWidth = 2; X.beginPath();
+      c.trail.forEach((p,i) => i===0 ? X.moveTo(p.x,p.y) : X.lineTo(p.x,p.y));
+      X.stroke();
+    }
+
+    X.shadowBlur = 15;
+    X.shadowColor = c.momentum ? '#ffd54f' : '#e8f5e9';
+    X.fillStyle = c.momentum ? '#ffd54f' : '#e8f5e9';
+    X.beginPath(); X.arc(c.px, c.py, 8, 0, Math.PI*2); X.fill();
+    X.shadowBlur = 0;
+
+    // Gradient arrow
+    const nx = c.px/W, ny = c.py/H, eps=0.003;
+    const gx = (c.terrain(nx+eps,ny) - c.terrain(nx-eps,ny)) / (2*eps);
+    const gy = (c.terrain(nx,ny+eps) - c.terrain(nx,ny-eps)) / (2*eps);
+    const gm = Math.sqrt(gx*gx+gy*gy);
+    if(gm > 0.1) {
+      const ax = c.px - (gx/gm)*25, ay = c.py - (gy/gm)*25;
+      X.strokeStyle = 'rgba(255,213,79,0.35)'; X.lineWidth = 2;
+      X.beginPath(); X.moveTo(c.px,c.py); X.lineTo(ax,ay); X.stroke();
+      X.fillStyle = 'rgba(255,213,79,0.35)';
+      X.beginPath(); X.arc(ax,ay,4,0,Math.PI*2); X.fill();
+    }
+
+    const alt = c.terrain(nx, ny);
+    X.fillStyle = 'rgba(10,26,15,0.8)'; X.fillRect(10, H-40, 130, 28);
+    X.fillStyle = alt < 0 ? '#4fc3f7' : '#ef9a9a';
+    X.font = 'bold 13px sans-serif'; X.textAlign = 'left';
+    X.fillText('altitude: '+ alt.toFixed(1), 18, H-22);
   }
-}
+};
 
 function ch2ShowAha() {
-  setPanel(`
-    <div class="panel">
-      <h2>💡 You just did Backpropagation!</h2>
-      <div class="aha">
-        <strong>In real neural networks:</strong><br>
-        <span class="real">Rain</span> = input data flowing through the network<br>
-        <span class="real">Gates</span> = model parameters (weights)<br>
-        <span class="real">Ocean level</span> = the output (and loss)<br>
-        <span class="real">Adjusting gates to hit target</span> = gradient descent<br><br>
-        You had to reason <em>backward</em> — "which gate affects the ocean most?" That's exactly the chain rule! The algorithm traces influence backward through the network to figure out which parameters to change.
-      </div>
-      <div style="text-align:center; margin-top:14px;">
-        <button class="btn btn-gold" onclick="completeCh(2)">🏆 Chapter Complete →</button>
-      </div>
+  clearPanels();
+  setPanel('ch2aha','mid',`
+    <h2>you just did gradient descent</h2>
+    <div class="aha-box">
+      the <strong>foggy mountain</strong> = the loss landscape (you can't see it all)<br>
+      <strong>walking downhill</strong> = following the gradient<br>
+      getting <strong>stuck</strong> = local minimum (looks good, isn't the best)<br>
+      <strong>momentum</strong> = SGD with momentum (carries past small bumps)<br>
+      <span class="r">real training uses Adam optimizer — momentum + adaptive step sizes. same instinct.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[1]=true;setScene('ch3')">continue</button>
     </div>
   `);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   CHAPTER 3: WHISPERING TREES (ATTENTION)
-   ═══════════════════════════════════════════════════════════════ */
-let ch3 = { weights: [25,25,25,25], scenario: null };
+// =============================================
+// CHAPTER 3: WORD DETECTIVE (ATTENTION)
+// =============================================
+let ch3 = {};
 
-const CH3_SCENARIOS = [
-  { query: 'What follows "ch"?', trees: [
-    { topic: 'After "ch"', value: 'r', match: 0.9 },
-    { topic: 'Endings', value: 'e', match: 0.3 },
-    { topic: 'Vowels', value: 'a', match: 0.5 },
-    { topic: 'Rare combos', value: 'z', match: 0.1 }], bestIdx: 0 },
-  { query: 'What ends "ann_"?', trees: [
-    { topic: 'Name ends', value: 'a', match: 0.8 },
-    { topic: 'Starts', value: 'm', match: 0.1 },
-    { topic: 'Suffixes', value: 'e', match: 0.6 },
-    { topic: 'Clusters', value: 'k', match: 0.2 }], bestIdx: 0 },
-];
+scenes.ch3 = {
+  init() {
+    bgTarget = 270; clearPanels();
+    const s = {
+      words: ['The','trophy','doesnt','fit','in','the','suitcase','because','it','is','too','big'],
+      blankIdx: 8, relevantIdx: [1,6,11]
+    };
+    ch3 = { sentence: s, selected: new Set(), revealed: false, wordPositions: [] };
+    tip('what does <span class="hl">"it"</span> refer to? <span class="hl">click the words</span> that help you decide.');
+  },
 
-sceneDraw.ch3 = function(dt, t) {
-  if (!ch3.scenario) return;
-  const s = ch3.scenario;
-  const total = ch3.weights.reduce((a,b) => a+b, 0) || 1;
-  const norm = ch3.weights.map(w => w / total);
-
-  // Sapling
-  const sapX = W/2, sapY = H * 0.72;
-  ctx.font = '40px serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('🌱', sapX, sapY);
-
-  // Elder tree positions in arc
-  const treePos = s.trees.map((_, i) => ({
-    x: W * (0.15 + i * 0.23),
-    y: H * 0.2 + Math.sin(i * 1.2) * 20
-  }));
-
-  s.trees.forEach((tree, i) => {
-    const tp = treePos[i];
-    const w = norm[i];
-
-    // Mycelium connection (pulsing)
-    const pulseAlpha = 0.15 + w * 0.7;
-    const pulseWidth = 1 + w * 8;
-    ctx.strokeStyle = `rgba(179,157,219,${pulseAlpha})`;
-    ctx.lineWidth = pulseWidth;
-    ctx.shadowBlur = w * 20;
-    ctx.shadowColor = '#b39ddb';
-    ctx.beginPath();
-    ctx.moveTo(sapX, sapY - 20);
-    const cpx = (sapX + tp.x) / 2 + Math.sin(t * 2 + i) * 20;
-    const cpy = (sapY + tp.y) / 2 + 30;
-    ctx.quadraticCurveTo(cpx, cpy, tp.x, tp.y + 30);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Pulse particles along connection
-    if (w > 0.2 && Math.random() < w * 0.15) {
-      const frac = Math.random();
-      const bx = lerp(sapX, tp.x, frac);
-      const by = lerp(sapY, tp.y + 30, frac);
-      particles.push(new Particle(bx, by, {
-        size: 2, life: 0.6, color: '#b39ddb', glow: 10, gravity: 0, vx: 0, vy: 0
-      }));
+  update(dt, t) {
+    if(mclick && !ch3.revealed) {
+      ch3.wordPositions.forEach(({i, x, y, w}) => {
+        if(mclick.x > x-4 && mclick.x < x+w+4 && mclick.y > y-22 && mclick.y < y+8) {
+          if(ch3.selected.has(i)) ch3.selected.delete(i);
+          else { ch3.selected.add(i); burst(x+w/2, y-5, 6, {col:'#b39ddb',sp:0.3}); }
+          const found = ch3.sentence.relevantIdx.every(ri => ch3.selected.has(ri));
+          if(found && !ch3.revealed) {
+            ch3.revealed = true;
+            burst(W/2, H*0.65, 25, {col:'#b39ddb',sp:1.5,gl:15});
+            setTimeout(() => tip('<span class="gr">yes!</span> "trophy", "suitcase", and "big" are the keys to understanding "it". <button class="btn btn-green" style="padding:5px 14px;font-size:12px;margin-left:6px" onclick="ch3ShowAha()">see why</button>'), 300);
+          }
+        }
+      });
     }
+  },
 
-    // Tree
-    ctx.font = '36px serif';
-    ctx.fillText('🌳', tp.x, tp.y);
+  draw(dt, t) {
+    const s = ch3.sentence;
+    const y = H*0.4;
+    let cx = W*0.06;
+    const queryX = W/2, queryY = H*0.65;
+    ch3.wordPositions = [];
 
-    // Labels
-    ctx.font = '11px sans-serif';
-    ctx.fillStyle = '#66bb6a';
-    ctx.fillText(tree.topic, tp.x, tp.y + 22);
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillStyle = '#b39ddb';
-    ctx.fillText(`"${tree.value}"`, tp.x, tp.y + 42);
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillStyle = '#ffd54f';
-    ctx.fillText(`${Math.round(w * 100)}%`, tp.x, tp.y + 58);
-  });
-};
+    X.font = 'bold 20px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#b39ddb';
+    X.fillText('"it" = ?', queryX, queryY);
 
-function startCh3() {
-  scene = 'ch3';
-  ch3.scenario = CH3_SCENARIOS[randInt(0, CH3_SCENARIOS.length)];
-  ch3.weights = [25, 25, 25, 25];
-  updateHud('🌳 Chapter 3: Whispering Trees');
-  ch3Render();
-}
+    s.words.forEach((w, i) => {
+      X.font = 'bold 17px sans-serif'; X.textAlign = 'left';
+      const ww = X.measureText(w).width;
+      ch3.wordPositions.push({i, x:cx, y, w:ww});
 
-function ch3Render() {
-  const s = ch3.scenario;
-  const total = ch3.weights.reduce((a,b) => a+b, 0) || 1;
-  const norm = ch3.weights.map(w => w / total);
-  // Weighted prediction
-  const scores = {};
-  s.trees.forEach((t, i) => { scores[t.value] = (scores[t.value] || 0) + norm[i]; });
-  const best = Object.entries(scores).sort((a,b) => b[1]-a[1])[0];
+      const isSelected = ch3.selected.has(i);
+      const isRelevant = s.relevantIdx.includes(i);
+      const isBlank = i === s.blankIdx;
+      const hover = mx>cx-4 && mx<cx+ww+4 && my>y-22 && my<y+8;
 
-  setPanel(`
-    <div class="panel" style="max-width:520px;">
-      <h2>🌳 Help the Sapling</h2>
-      <p>The sapling asks: <span class="highlight">"${s.query}"</span><br>
-      Which elder trees should it listen to most? Adjust the attention weights:</p>
-      ${s.trees.map((t, i) => `
-        <div class="range-row">
-          <label>🌲 "${t.value}" (${t.topic})</label>
-          <input type="range" min="0" max="100" value="${ch3.weights[i]}" oninput="ch3Set(${i},this.value)">
-          <span class="rv" id="c3v-${i}">${Math.round(norm[i]*100)}%</span>
-        </div>
-      `).join('')}
-      <p style="text-align:center;">Prediction: <strong style="color:#b39ddb; font-size:20px;">"${best[0]}"</strong> <span style="color:#6b8f6e">(${Math.round(best[1]*100)}% confidence)</span></p>
-      <div style="text-align:center;">
-        <button class="btn btn-green" onclick="ch3Check()">Submit Attention</button>
-      </div>
-      <div id="ch3-msg"></div>
-    </div>
-  `);
-}
+      if(isSelected) {
+        const strength = isRelevant ? 0.7 : 0.15;
+        X.strokeStyle = 'rgba(179,157,219,'+strength+')';
+        X.lineWidth = isRelevant ? 3 : 1;
+        if(isRelevant) { X.shadowBlur=10; X.shadowColor='#b39ddb'; }
+        X.beginPath();
+        X.moveTo(cx+ww/2, y+5);
+        X.quadraticCurveTo(cx+ww/2, queryY-25, queryX, queryY-12);
+        X.stroke();
+        X.shadowBlur = 0;
+        if(isRelevant && Math.random()<0.08) {
+          const f = Math.random();
+          particles.push(new P(lerp(cx+ww/2,queryX,f), lerp(y+5,queryY-12,f), {sz:1.5,life:0.4,col:'#b39ddb',gl:6}));
+        }
+      }
 
-function ch3Set(i, val) {
-  ch3.weights[i] = parseInt(val);
-  ch3Render();
-}
+      if(isBlank) { X.fillStyle='rgba(179,157,219,0.15)'; X.fillRect(cx-4,y-18,ww+8,28); }
+      else if(isSelected) { X.fillStyle=isRelevant?'rgba(179,157,219,0.2)':'rgba(239,83,80,0.08)'; X.fillRect(cx-4,y-18,ww+8,28); }
+      else if(hover) { X.fillStyle='rgba(255,255,255,0.04)'; X.fillRect(cx-4,y-18,ww+8,28); }
 
-function ch3Check() {
-  const total = ch3.weights.reduce((a,b) => a+b, 0) || 1;
-  const norm = ch3.weights.map(w => w / total);
-  const maxIdx = norm.indexOf(Math.max(...norm));
-  if (maxIdx === ch3.scenario.bestIdx && norm[maxIdx] > 0.35) {
-    spawnParticles(W/2, H*0.5, 30, { color: '#b39ddb', spread: 2, glow: 15 });
-    ch3ShowAha();
-  } else {
-    document.getElementById('ch3-msg').innerHTML = `<div class="msg msg-err">The "${ch3.scenario.trees[ch3.scenario.bestIdx].topic}" elder knows best — give it more attention!</div>`;
+      X.fillStyle = isBlank ? '#b39ddb' : isSelected ? (isRelevant?'#e8f5e9':'#7a9a7e') : (hover?'#a5c4a8':'#5a7a5e');
+      X.fillText(w, cx, y);
+      cx += ww + 10;
+    });
   }
-}
+};
 
 function ch3ShowAha() {
-  setPanel(`
-    <div class="panel">
-      <h2>💡 You just computed Attention!</h2>
-      <div class="aha">
-        <strong>In real transformers:</strong><br>
-        Sapling's <span class="real">question</span> = Query (Q)<br>
-        Each elder's <span class="real">expertise topic</span> = Key (K)<br>
-        Each elder's <span class="real">advice</span> = Value (V)<br>
-        <span class="real">Matching question to topic</span> = Q·K dot product<br>
-        <span class="real">Attention weights</span> = softmax of scores<br>
-        <span class="real">Final wisdom</span> = weighted sum of Values<br><br>
-        Multi-head attention = multiple saplings asking <em>different questions</em> simultaneously!
-      </div>
-      <div style="text-align:center; margin-top:14px;">
-        <button class="btn btn-gold" onclick="completeCh(3)">🏆 Chapter Complete →</button>
-      </div>
+  clearPanels();
+  setPanel('ch3aha','mid',`
+    <h2>you just computed attention</h2>
+    <div class="aha-box">
+      <strong>clicking relevant words</strong> = computing attention weights (Q*K similarity)<br>
+      <strong>bright connections</strong> = high attention, <strong>dim</strong> = low attention<br>
+      the <strong>query</strong> ("it") looks at every word's <strong>key</strong> and decides who to listen to<br>
+      <span class="r">transformers do this for every word simultaneously, with multiple "heads" asking different questions.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[2]=true;setScene('ch4')">continue</button>
     </div>
   `);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   CHAPTER 4: VILLAGE ELDER (TRAINING)
-   ═══════════════════════════════════════════════════════════════ */
-let ch4 = { step: 0, losses: [], model: null };
+// =============================================
+// CHAPTER 4: YOU ARE THE MODEL
+// =============================================
+let ch4 = {};
+const TRAIN_WORDS = ['emma','olivia','liam','noah','ava','sophia','mia','ella','aria','riley','chloe'];
+const TEST_WORDS = ['zephyr','quartz','axiom','fjord'];
 
-function ch4InitModel() {
-  ch4.model = {};
-  for (let i = 0; i < 27; i++) {
-    ch4.model[i] = {};
-    for (let j = 0; j < 27; j++) ch4.model[i][j] = 1;
+scenes.ch4 = {
+  init() {
+    bgTarget = 30; clearPanels();
+    ch4 = { round:0, maxRounds:30, correct:0, total:0, history:[],
+            currentContext:'', currentAnswer:'', phase:'play',
+            testRound:0, testCorrect:0, testTotal:0, streak:0, waiting:false };
+    this.nextRound();
+    tip('you ARE the language model. see the letters, <span class="hl">press a key</span> to guess what comes next.');
+  },
+
+  nextRound() {
+    if(ch4.round >= ch4.maxRounds) {
+      ch4.phase = 'test';
+      tip('<span style="color:#ef5350">NEW WORDS</span> you have never seen! keep guessing.');
+      this.nextTestRound();
+      return;
+    }
+    const word = TRAIN_WORDS[ch4.round % TRAIN_WORDS.length];
+    const pos = randInt(0, word.length - 1);
+    ch4.currentContext = word.slice(0, pos + 1);
+    ch4.currentAnswer = word[pos + 1];
+    if(!ch4.currentAnswer) { ch4.round++; this.nextRound(); return; }
+    ch4.round++;
+    ch4.waiting = false;
+  },
+
+  nextTestRound() {
+    if(ch4.testRound >= 8) { ch4ShowOverfit(); return; }
+    const word = TEST_WORDS[ch4.testRound % TEST_WORDS.length];
+    const pos = randInt(0, word.length - 1);
+    ch4.currentContext = word.slice(0, pos + 1);
+    ch4.currentAnswer = word[pos + 1];
+    if(!ch4.currentAnswer) { ch4.testRound++; this.nextTestRound(); return; }
+    ch4.testRound++;
+    ch4.waiting = false;
+  },
+
+  update(dt, t) {
+    if(ch4.waiting) return;
+    if(kpress && kpress.length === 1 && ALPHA.includes(kpress.toLowerCase())) {
+      const guess = kpress.toLowerCase();
+      const correct = guess === ch4.currentAnswer;
+      ch4.total++;
+      if(ch4.phase === 'test') { ch4.testTotal++; if(correct) ch4.testCorrect++; }
+      if(correct) { ch4.correct++; ch4.streak++; burst(W/2, H*0.38, 8, {col:'#66bb6a',sp:0.4}); }
+      else { ch4.streak = 0; shake(3); burst(W/2, H*0.38, 5, {col:'#ef5350',sp:0.3}); }
+      ch4.history.push({ctx:ch4.currentContext, ans:ch4.currentAnswer, guess, correct, phase:ch4.phase});
+      ch4.lastGuess = guess; ch4.lastCorrect = correct; ch4.waiting = true;
+      setTimeout(() => {
+        if(ch4.phase === 'test') this.nextTestRound();
+        else this.nextRound();
+      }, 350);
+    }
+  },
+
+  draw(dt, t) {
+    // Context
+    X.font = 'bold 52px monospace'; X.textAlign = 'center';
+    X.fillStyle = '#e8f5e9';
+    X.fillText(ch4.currentContext, W/2, H*0.38);
+
+    // Cursor
+    if(Math.sin(t*4) > 0) {
+      const tw = X.measureText(ch4.currentContext).width;
+      X.fillStyle = '#ffd54f';
+      X.fillRect(W/2 + tw/2 + 6, H*0.3, 3, 40);
+    }
+
+    // Last guess feedback
+    if(ch4.waiting && ch4.lastGuess) {
+      const gx = W/2 + X.measureText(ch4.currentContext).width/2 + 20;
+      X.font = 'bold 52px monospace';
+      X.fillStyle = ch4.lastCorrect ? '#66bb6a' : '#ef5350';
+      X.fillText(ch4.lastGuess, gx, H*0.38);
+      if(!ch4.lastCorrect) {
+        X.fillStyle = '#66bb6a44'; X.font = 'bold 28px monospace';
+        X.fillText('('+ch4.currentAnswer+')', gx + 40, H*0.38);
+      }
+    }
+
+    X.font = '14px sans-serif'; X.fillStyle = '#4a6b4d'; X.textAlign = 'center';
+    X.fillText('press a letter key', W/2, H*0.48);
+
+    // Score
+    const pct = ch4.total > 0 ? Math.round(ch4.correct/ch4.total*100) : 0;
+    X.font = 'bold 15px sans-serif'; X.textAlign = 'left';
+    X.fillStyle = '#ffd54f'; X.fillText('accuracy: '+pct+'%', 20, 70);
+    X.fillStyle = '#66bb6a'; X.fillText('streak: '+ch4.streak, 20, 90);
+
+    if(ch4.phase === 'test') {
+      X.fillStyle = '#ef5350'; X.font = 'bold 14px sans-serif'; X.textAlign = 'center';
+      X.fillText('NEW WORDS — never seen before!', W/2, H*0.18);
+    }
+
+    // Rolling accuracy graph
+    if(ch4.history.length > 4) {
+      const gX = W*0.65, gY = 55, gW = W*0.3, gH = 70;
+      X.fillStyle = 'rgba(10,26,15,0.6)'; X.fillRect(gX,gY,gW,gH);
+      X.strokeStyle = '#1b5e2044'; X.lineWidth=1; X.strokeRect(gX,gY,gW,gH);
+      const win = 5;
+      X.beginPath(); X.strokeStyle = '#66bb6a'; X.lineWidth = 2;
+      for(let i=win;i<ch4.history.length;i++) {
+        const slice = ch4.history.slice(i-win,i);
+        const acc = slice.filter(h=>h.correct).length / win;
+        const x = gX + gW * (i/(Math.max(ch4.history.length-1,1)));
+        const y = gY + gH * (1-acc);
+        if(i===win) X.moveTo(x,y); else X.lineTo(x,y);
+      }
+      X.stroke();
+      const trainEnd = ch4.history.findIndex(h => h.phase==='test');
+      if(trainEnd > 0) {
+        const bx = gX + gW * (trainEnd/(ch4.history.length-1));
+        X.strokeStyle = '#ef535066'; X.setLineDash([3,3]);
+        X.beginPath(); X.moveTo(bx,gY); X.lineTo(bx,gY+gH); X.stroke(); X.setLineDash([]);
+        X.fillStyle = '#ef5350'; X.font = '10px sans-serif'; X.textAlign = 'center';
+        X.fillText('new words', bx, gY-3);
+      }
+      X.fillStyle = '#4a6b4d'; X.font = '10px sans-serif'; X.textAlign = 'left';
+      X.fillText('your accuracy', gX, gY-3);
+    }
+
+    // Recent history
+    const recent = ch4.history.slice(-8);
+    const ry = H*0.58;
+    recent.forEach((h, i) => {
+      const x = W/2 - (recent.length-1)*40/2 + i*40;
+      X.fillStyle = h.correct ? 'rgba(102,187,106,0.12)' : 'rgba(239,83,80,0.08)';
+      X.fillRect(x-16, ry, 32, 40);
+      X.strokeStyle = h.correct ? '#66bb6a44' : '#ef535044'; X.lineWidth=1;
+      X.strokeRect(x-16, ry, 32, 40);
+      X.font = '9px sans-serif'; X.textAlign = 'center';
+      X.fillStyle = '#4a6b4d'; X.fillText(h.ctx, x, ry+14);
+      X.font = 'bold 13px sans-serif';
+      X.fillStyle = h.correct ? '#66bb6a' : '#ef5350';
+      X.fillText(h.guess, x, ry+30);
+    });
   }
-  ch4.step = 0;
-  ch4.losses = [];
-}
-
-sceneDraw.ch4 = function(dt, t) {
-  if (ch4.losses.length < 2) return;
-  const losses = ch4.losses;
-  const pad = 60;
-  const gW = W * 0.55;
-  const gH = H * 0.45;
-  const gX = (W - gW) / 2;
-  const gY = H * 0.08;
-
-  const maxL = Math.max(3.5, ...losses);
-  const minL = Math.min(1.0, ...losses);
-
-  // Grid background
-  ctx.fillStyle = 'rgba(10,26,15,0.7)';
-  ctx.fillRect(gX, gY, gW, gH);
-  ctx.strokeStyle = '#1b5e2044';
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = gY + gH * i / 4;
-    ctx.beginPath(); ctx.moveTo(gX, y); ctx.lineTo(gX + gW, y); ctx.stroke();
-    ctx.fillStyle = '#6b8f6e';
-    ctx.font = '11px sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillText((maxL - (maxL-minL)*i/4).toFixed(1), gX - 6, y + 4);
-  }
-
-  // Target line
-  const targetY = gY + gH * (1 - (2.0 - minL)/(maxL - minL));
-  ctx.strokeStyle = '#ffd54f44';
-  ctx.setLineDash([5,4]);
-  ctx.beginPath(); ctx.moveTo(gX, targetY); ctx.lineTo(gX+gW, targetY); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#ffd54f';
-  ctx.font = '11px sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText('🎯 2.0', gX+gW+4, targetY+4);
-
-  // Loss curve
-  ctx.beginPath();
-  ctx.strokeStyle = '#ef5350';
-  ctx.lineWidth = 2.5;
-  ctx.shadowBlur = 6;
-  ctx.shadowColor = '#ef5350';
-  losses.forEach((l, i) => {
-    const x = gX + gW * i / (losses.length - 1);
-    const y = gY + gH * (1 - (l - minL) / (maxL - minL));
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // Labels
-  ctx.fillStyle = '#6b8f6e';
-  ctx.font = '12px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Training Steps →', gX + gW/2, gY + gH + 20);
-  ctx.save();
-  ctx.translate(gX - 30, gY + gH/2);
-  ctx.rotate(-Math.PI/2);
-  ctx.fillText('Loss (surprise) ↓', 0, 0);
-  ctx.restore();
 };
 
-function startCh4() {
-  scene = 'ch4';
-  ch4InitModel();
-  updateHud('🏘️ Chapter 4: The Village Elder');
-  ch4Render();
-}
-
-function ch4TrainStep() {
-  const name = NAMES[ch4.step % NAMES.length];
-  const tokens = [26, ...name.split('').map(c => ALPHA.indexOf(c)), 26];
-  let totalLoss = 0;
-  for (let i = 0; i < tokens.length - 1; i++) {
-    const curr = tokens[i], next = tokens[i+1];
-    const counts = ch4.model[curr];
-    const total = Object.values(counts).reduce((a,b) => a+b, 0);
-    totalLoss += -Math.log(counts[next] / total);
-    counts[next] += 2;
-  }
-  const avgLoss = totalLoss / (tokens.length - 1);
-  ch4.step++;
-  ch4.losses.push(avgLoss);
-  return { name, loss: avgLoss };
-}
-
-function ch4DoStep() {
-  const result = ch4TrainStep();
-  spawnParticles(W/2, H*0.6, 3, { color: result.loss < 2.5 ? '#66bb6a' : '#ef5350', spread: 0.3 });
-  ch4Render();
-  if (result.loss < 2.0 && ch4.step >= 20) {
-    setTimeout(() => ch4ShowAha(), 500);
-  }
-}
-
-function ch4Auto() {
-  let count = 0;
-  const iv = setInterval(() => {
-    const r = ch4TrainStep();
-    count++;
-    if (count % 5 === 0) ch4Render();
-    if (count >= 80 || (r.loss < 2.0 && ch4.step >= 20)) {
-      clearInterval(iv);
-      ch4Render();
-      if (r.loss < 2.0) setTimeout(() => ch4ShowAha(), 500);
-    }
-  }, 30);
-}
-
-function ch4Render() {
-  const lastLoss = ch4.losses.length > 0 ? ch4.losses[ch4.losses.length - 1] : null;
-  setPanel(`
-    <div class="panel" style="max-width:460px;">
-      <h2>🏘️ Train the Elder</h2>
-      <p>The Elder sees names and tries to guess the next letter. Each mistake teaches her. Get the loss below <span class="highlight">2.0</span>!</p>
-      <div style="display:flex; gap:8px; justify-content:center; margin:10px 0;">
-        <button class="btn btn-green" onclick="ch4DoStep()">🎓 Train Step</button>
-        <button class="btn btn-dim" onclick="ch4Auto()">⚡ Auto ×80</button>
-      </div>
-      <p style="text-align:center; font-size:14px;">
-        Step: <strong>${ch4.step}</strong> &nbsp;│&nbsp;
-        Loss: <strong style="color:${lastLoss && lastLoss < 2.0 ? '#66bb6a' : '#ffd54f'}">${lastLoss ? lastLoss.toFixed(2) : '—'}</strong>
-      </p>
-      <div id="ch4-msg"></div>
+function ch4ShowOverfit() {
+  clearPanels();
+  const trainTotal = ch4.history.filter(h=>h.phase==='play').length;
+  const trainCorr = ch4.history.filter(h=>h.phase==='play'&&h.correct).length;
+  burst(W/2, H/2, 25, {col:'#ffd54f',sp:1.5,gl:15});
+  setPanel('ch4aha','mid',`
+    <h2>you just experienced overfitting</h2>
+    <p style="color:#66bb6a">training accuracy: ${Math.round(trainCorr/Math.max(1,trainTotal)*100)}%</p>
+    <p style="color:#ef5350">new words accuracy: ${Math.round(ch4.testCorrect/Math.max(1,ch4.testTotal)*100)}%</p>
+    <div class="aha-box">
+      you <strong>memorized patterns</strong> — after "emm" you knew "a"<br>
+      but <strong>new words failed</strong> because you learned the data, not the rules<br>
+      that's <strong>overfitting</strong> — memorize instead of generalize<br>
+      <span class="r">the accuracy drop you felt? that's the train/test gap. real LLMs use diverse data and regularization to fight it.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[3]=true;setScene('ch5')">continue</button>
     </div>
   `);
 }
 
-function ch4ShowAha() {
-  spawnParticles(W/2, H/2, 40, { color: '#ffd54f', spread: 2, glow: 20, sizeMul: 1.5 });
-  setPanel(`
-    <div class="panel">
-      <h2>💡 You just trained a Language Model!</h2>
-      <div class="aha">
-        <strong>In real training:</strong><br>
-        The Elder's <span class="real">intuition</span> = model parameters<br>
-        <span class="real">Showing her names</span> = feeding training data<br>
-        Her <span class="real">surprise</span> = loss function (-log probability)<br>
-        <span class="real">Adjusting intuition</span> = gradient descent step<br>
-        <span class="real">Loss going down</span> = the model is learning!<br><br>
-        ChatGPT trains on trillions of words across thousands of GPUs. Same loop.
-      </div>
-      <div style="text-align:center; margin-top:14px;">
-        <button class="btn btn-gold" onclick="completeCh(4)">🏆 Chapter Complete →</button>
-      </div>
-    </div>
-  `);
-}
+// =============================================
+// CHAPTER 5: PROBABILITY MOUNTAINS
+// =============================================
+let ch5 = {};
 
-/* ═══════════════════════════════════════════════════════════════
-   CHAPTER 5: THE ORACLE (INFERENCE)
-   ═══════════════════════════════════════════════════════════════ */
-let ch5 = { temp: 0.5, good: 0, generated: [] };
+scenes.ch5 = {
+  init() {
+    bgTarget = 260; clearPanels();
+    const model = {};
+    for(let i=0;i<27;i++){model[i]={};for(let j=0;j<27;j++)model[i][j]=1;}
+    for(let r=0;r<100;r++) TRAIN_WORDS.forEach(w => {
+      const tok = [26,...w.split('').map(c=>ALPHA.indexOf(c)),26];
+      for(let i=0;i<tok.length-1;i++) model[tok[i]][tok[i+1]]+=3;
+    });
+    ch5 = { model, temp:1.0, context:[26], generated:'', names:[], probs:[], sampledIdx:-1, animating:false };
+    this.computeProbs();
+    tip('mountains = probability of each letter. <span class="hl">click a peak</span> to pick it. <span class="hl">space</span> to auto-sample. <span class="hl">up/down</span> = temperature.');
+  },
 
-function startCh5() {
-  scene = 'ch5';
-  ch5 = { temp: 0.5, good: 0, generated: [] };
-  // Ensure model is trained
-  if (!ch4.model || ch4.step < 50) {
-    ch4InitModel();
-    for (let i = 0; i < 200; i++) {
-      const name = NAMES[i % NAMES.length];
-      const tokens = [26, ...name.split('').map(c => ALPHA.indexOf(c)), 26];
-      for (let j = 0; j < tokens.length - 1; j++) ch4.model[tokens[j]][tokens[j+1]] += 2;
+  computeProbs() {
+    const last = ch5.context[ch5.context.length-1];
+    const counts = ch5.model[last];
+    const total = Object.values(counts).reduce((a,b)=>a+b,0);
+    const raw = [];
+    for(let i=0;i<27;i++) raw.push(Math.pow(counts[i]/total, 1/ch5.temp));
+    const sum = raw.reduce((a,b)=>a+b,0);
+    ch5.probs = raw.map(r=>r/sum);
+    ch5.sampledIdx = -1;
+  },
+
+  update(dt, t) {
+    if(kpress === 'ArrowUp') { ch5.temp = clamp(ch5.temp + 0.15, 0.2, 3.0); this.computeProbs(); }
+    if(kpress === 'ArrowDown') { ch5.temp = clamp(ch5.temp - 0.15, 0.2, 3.0); this.computeProbs(); }
+
+    if(mclick && !ch5.animating) {
+      const barW = (W*0.8)/27, startX = W*0.1;
+      const idx = Math.floor((mclick.x - startX) / barW);
+      if(idx >= 0 && idx < 27 && mclick.y > H*0.15 && mclick.y < H*0.75) this.doSample(idx);
     }
-  }
-  updateHud('🔮 Chapter 5: The Oracle Speaks');
-  ch5Render();
-}
 
-function ch5Gen() {
-  let token = 26, name = [];
-  for (let i = 0; i < 15; i++) {
-    const counts = ch4.model[token];
-    const total = Object.values(counts).reduce((a,b) => a+b, 0);
-    let probs = [];
-    for (let j = 0; j < 27; j++) probs.push(Math.pow(counts[j] / total, 1 / ch5.temp));
-    const pTotal = probs.reduce((a,b) => a+b, 0);
-    let r = Math.random() * pTotal, chosen = 0;
-    for (let j = 0; j < 27; j++) { r -= probs[j]; if (r <= 0) { chosen = j; break; } }
-    if (chosen === 26) break;
-    name.push(ALPHA[chosen]);
-    token = chosen;
-  }
-  const n = name.join('');
-  ch5.generated.unshift(n);
-  spawnParticles(W/2, H*0.3, 12, { color: '#b39ddb', spread: 1, glow: 12 });
-  ch5Render();
-}
-
-function ch5Rate(idx, good) {
-  if (good) {
-    ch5.good++;
-    spawnParticles(W/2, H*0.5, 15, { color: '#66bb6a', spread: 1 });
-  }
-  ch5.generated[idx] = { name: ch5.generated[idx].name || ch5.generated[idx], rated: true, good };
-  ch5Render();
-  if (ch5.good >= 5) setTimeout(() => ch5ShowAha(), 600);
-}
-
-function ch5Render() {
-  const genHtml = ch5.generated.slice(0, 8).map((g, i) => {
-    const name = g.name || g;
-    const rated = g.rated;
-    if (rated) {
-      return `<div style="padding:6px 14px;border-radius:8px;display:inline-block;margin:3px;border:1px solid ${g.good?'#66bb6a':'#ef535066'};opacity:${g.good?1:0.4}">${name} ${g.good?'👍':'👎'}</div>`;
+    if(kpress === ' ' && !ch5.animating) {
+      let r = Math.random(), idx = 0;
+      for(let i=0;i<27;i++) { r -= ch5.probs[i]; if(r<=0){idx=i;break;} }
+      this.doSample(idx);
     }
-    return `<div style="padding:6px 14px;border-radius:8px;display:inline-flex;gap:6px;align-items:center;margin:3px;border:1px solid #1b5e20;background:rgba(179,157,219,0.08)">
-      <strong style="color:#e8f5e9;font-size:16px;">${name}</strong>
-      <button class="btn btn-dim" style="padding:3px 8px;font-size:12px" onclick="ch5Rate(${i},true)">👍</button>
-      <button class="btn btn-dim" style="padding:3px 8px;font-size:12px" onclick="ch5Rate(${i},false)">👎</button>
-    </div>`;
-  }).join('');
+  },
 
-  setPanel(`
-    <div class="panel" style="max-width:500px;">
-      <h2>🔮 The Oracle Speaks</h2>
-      <p>Your trained model generates new names! Rate 5 as "sounds real" to win.</p>
-      <div class="range-row">
-        <label>🌡️ Temperature:</label>
-        <input type="range" min="15" max="150" value="${ch5.temp*100}" oninput="ch5.temp=this.value/100;document.getElementById('c5tv').textContent=ch5.temp.toFixed(1)">
-        <span class="rv" id="c5tv">${ch5.temp.toFixed(1)}</span>
-      </div>
-      <p style="text-align:center;font-size:12px;color:#6b8f6e;">🧊 Safe ←──→ Creative 🌪️</p>
-      <div style="text-align:center;margin:10px 0;">
-        <button class="btn btn-green" onclick="ch5Gen()">🔮 Generate</button>
-        <span style="margin-left:10px;color:#ffd54f;font-weight:700;">Good: ${ch5.good}/5</span>
-      </div>
-      <div style="text-align:center;">${genHtml}</div>
-    </div>
-  `);
-}
+  doSample(idx) {
+    ch5.sampledIdx = idx; ch5.animating = true;
+    const barW = (W*0.8)/27, startX = W*0.1;
+    burst(startX + idx*barW + barW/2, H*0.5, 10, {col:'#b39ddb',sp:0.5,gl:10});
+    setTimeout(() => {
+      if(idx === 26) {
+        if(ch5.generated.length > 0) { ch5.names.push(ch5.generated); burst(W/2, H*0.85, 15, {col:'#66bb6a',sp:1}); }
+        ch5.generated = ''; ch5.context = [26];
+      } else {
+        ch5.generated += ALPHA[idx]; ch5.context.push(idx);
+      }
+      this.computeProbs(); ch5.animating = false;
+      if(ch5.names.length >= 5) setTimeout(() => ch5ShowAha(), 400);
+    }, 200);
+  },
+
+  draw(dt, t) {
+    const probs = ch5.probs;
+    const barW = (W*0.8)/27, startX = W*0.1, baseY = H*0.65, maxH = H*0.38;
+
+    probs.forEach((p, i) => {
+      const x = startX + i*barW;
+      const h = p * maxH * 8;
+      const hover = mx>x && mx<x+barW && my>baseY-h && my<baseY;
+      const sampled = i === ch5.sampledIdx;
+
+      const grad = X.createLinearGradient(x, baseY-h, x, baseY);
+      if(sampled) { grad.addColorStop(0,'#ffd54f'); grad.addColorStop(1,'#ff980033'); }
+      else {
+        const hue = i===26 ? 45 : 260 + p*120;
+        grad.addColorStop(0, `hsla(${hue},60%,${50+p*30}%,${hover?0.85:0.65})`);
+        grad.addColorStop(1, `hsla(${hue},40%,30%,0.15)`);
+      }
+      X.fillStyle = grad;
+      X.beginPath();
+      X.moveTo(x, baseY);
+      X.quadraticCurveTo(x, baseY-h*0.8, x+barW*0.5, baseY-h);
+      X.quadraticCurveTo(x+barW, baseY-h*0.8, x+barW, baseY);
+      X.fill();
+
+      if(p > 0.08) { X.shadowBlur=p*12; X.shadowColor=sampled?'#ffd54f':'#b39ddb';
+        X.beginPath(); X.arc(x+barW/2,baseY-h,2,0,Math.PI*2); X.fill(); X.shadowBlur=0; }
+
+      const label = i===26 ? 'end' : ALPHA[i];
+      X.font = hover ? 'bold 11px sans-serif' : '9px sans-serif';
+      X.textAlign = 'center';
+      X.fillStyle = hover ? '#e8f5e9' : '#3a5a3e';
+      X.fillText(label, x+barW/2, baseY+13);
+      if(hover) { X.fillStyle='#ffd54f'; X.font='bold 10px sans-serif';
+        X.fillText((p*100).toFixed(1)+'%', x+barW/2, baseY-h-8); }
+    });
+
+    X.strokeStyle = '#1b5e2044'; X.lineWidth=1;
+    X.beginPath(); X.moveTo(startX,baseY); X.lineTo(startX+27*barW,baseY); X.stroke();
+
+    // Current word
+    X.font = 'bold 30px monospace'; X.textAlign = 'center'; X.fillStyle = '#e8f5e9';
+    X.fillText(ch5.generated + (Math.sin(t*4)>0?'|':''), W/2, H*0.12);
+
+    // Temperature
+    X.fillStyle = 'rgba(10,26,15,0.7)'; X.fillRect(W-90,H*0.18,80,44);
+    X.font = 'bold 12px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#ffd54f'; X.fillText('temp: '+ch5.temp.toFixed(1), W-50, H*0.18+16);
+    X.fillStyle = '#4a6b4d'; X.font = '10px sans-serif';
+    X.fillText('up/down keys', W-50, H*0.18+30);
+
+    // Names
+    if(ch5.names.length > 0) {
+      X.font = '13px sans-serif'; X.textAlign = 'left'; X.fillStyle = '#66bb6a';
+      ch5.names.slice(-5).forEach((n,i) => X.fillText('> '+n, 20, H*0.78+i*18));
+    }
+
+    X.font = '11px sans-serif'; X.textAlign = 'center'; X.fillStyle = '#3a5a3e';
+    X.fillText('click peaks | space = auto | "end" = finish name', W/2, H*0.97);
+  }
+};
 
 function ch5ShowAha() {
-  spawnParticles(W/2, H/2, 50, { color: '#ffd54f', spread: 3, glow: 25, sizeMul: 2, lifeMul: 2 });
-  setPanel(`
-    <div class="panel">
-      <h2>💡 You just did LLM Inference!</h2>
-      <div class="aha">
-        <strong>In ChatGPT:</strong><br>
-        The <span class="real">Oracle</span> = your trained model<br>
-        <span class="real">Temperature</span> = creativity control<br>
-        Each letter = <span class="real">sampling from a probability distribution</span><br>
-        <span class="real">⟨BOS⟩ → letters → ⟨BOS⟩</span> = autoregressive generation<br><br>
-        When ChatGPT replies to you, it's doing exactly this — one token at a time, sampling from probabilities, until it decides the response is complete.
-      </div>
-      <div style="text-align:center; margin-top:14px;">
-        <button class="btn btn-gold" onclick="showVictory()">🏆 Complete the Journey!</button>
-      </div>
+  clearPanels();
+  burst(W/2, H/2, 50, {col:'#ffd54f',sp:3,gl:25,sm:2,lm:2});
+  setPanel('ch5aha','mid',`
+    <h2>you just did LLM inference</h2>
+    <div class="aha-box">
+      <strong>mountains</strong> = probability distribution over next tokens<br>
+      <strong>clicking a peak</strong> = sampling from the distribution<br>
+      <strong>temperature</strong> reshapes the landscape:<br>
+      &nbsp; low = sharp peaks = safe, repetitive<br>
+      &nbsp; high = flat = chaotic, creative<br>
+      <strong>letter by letter</strong> = autoregressive generation<br>
+      <span class="r">ChatGPT does exactly this — one token at a time, from probability mountains shaped by everything before it.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[4]=true;showVictory()">complete the journey</button>
     </div>
   `);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   CHAPTER FLOW
-   ═══════════════════════════════════════════════════════════════ */
-function completeCh(n) {
-  completed[n - 1] = true;
-  const next = [startCh2, startCh3, startCh4, startCh5, showVictory];
-  next[n - 1]();
-}
-
+// =============================================
+// VICTORY
+// =============================================
 function showVictory() {
-  completed[4] = true;
-  scene = 'victory';
-  updateHud('🌟 Journey Complete');
-  spawnParticles(W/2, H/2, 80, { color: '#ffd54f', spread: 3, glow: 25, sizeMul: 2, lifeMul: 3 });
-  setPanel(`
-    <div class="panel panel-center" style="text-align:center; max-width:560px;">
-      <h2 style="font-size:32px;">🌟 You Built a Language Model!</h2>
-      <p style="font-size:15px;">From ant trails to oracle prophecies — you now understand how LLMs work.</p>
-      <div style="text-align:left; margin:16px 0; display:grid; gap:6px;">
-        <div>🐜 <strong>Tokenizer</strong> — text ↔ numbers</div>
-        <div>🏔️ <strong>Backpropagation</strong> — trace errors backward to fix weights</div>
-        <div>🌳 <strong>Attention</strong> — focus on what matters</div>
-        <div>🏘️ <strong>Training</strong> — learn patterns from data</div>
-        <div>🔮 <strong>Inference</strong> — generate by sampling predictions</div>
+  scene = 'victory'; bgTarget = 130; clearPanels();
+  burst(W/2, H/2, 80, {col:'#ffd54f',sp:3,gl:25,sm:2,lm:3});
+  setTimeout(() => {
+    setPanel('vic','mid',`
+      <h2 style="font-size:24px">you built a language model</h2>
+      <div style="text-align:left;margin:12px 0;font-size:13px;color:#a5c4a8;line-height:2">
+        <div>tokenizer — shared codebook, text to numbers</div>
+        <div>gradient descent — navigate loss landscapes blind</div>
+        <div>attention — focus on what matters in context</div>
+        <div>training — learn patterns, beware overfitting</div>
+        <div>inference — sample from probability mountains</div>
       </div>
-      <p style="font-size:13px; color:#6b8f6e; border-top:1px solid #1b5e20; padding-top:12px;">
-        From this tiny name generator to GPT-4 — the only difference is scale.
+      <p style="color:#4a6b4d;font-size:12px;border-top:1px solid #1b5e2044;padding-top:10px;text-align:center">
+        from this tiny name generator to GPT-4 — the only difference is scale.
       </p>
-      <button class="btn btn-dim" onclick="location.reload()" style="margin-top:10px;">🔄 Play Again</button>
-    </div>
-  `);
+      <div style="text-align:center;margin-top:8px">
+        <button class="btn btn-dim" onclick="location.reload()">play again</button>
+      </div>
+    `);
+  }, 500);
 }
+scenes.victory = { draw(){} };
 </script>
 </body>
 </html>
