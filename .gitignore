@@ -11,3 +11,13 @@ eval_bundle/
 # Local setup
 CLAUDE.md
 wandb/
+
+# Editor & IDE
+.vscode/
+*.ipynb_checkpoints/
+
+# Generated during notebook runs
+notebooks/input.txt
+
+# Misc
+my.ipynb

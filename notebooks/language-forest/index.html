@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Language Forest</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050d08;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;user-select:none}
+canvas{display:block}
+#ui{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#ui>*{pointer-events:auto}
+.tip{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);color:#6b8f6e;font-size:14px;text-align:center;
+  background:rgba(5,13,8,0.85);padding:10px 24px;border-radius:12px;border:1px solid #1b5e2044;
+  max-width:600px;backdrop-filter:blur(8px);transition:opacity 0.5s;line-height:1.5}
+.tip .hl{color:#ffd54f;font-weight:600}
+.tip .gr{color:#66bb6a;font-weight:600}
+.tip .bl{color:#4fc3f7;font-weight:600}
+.hud{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+.hud-dot{width:32px;height:32px;border-radius:50%;border:2px solid #1b5e20;display:flex;align-items:center;
+  justify-content:center;font-size:14px;transition:all 0.5s;cursor:pointer;background:rgba(5,13,8,0.7)}
+.hud-dot.done{border-color:#66bb6a;background:rgba(102,187,106,0.15)}
+.hud-dot.active{border-color:#ffd54f;box-shadow:0 0 12px #ffd54f66}
+.float-panel{position:fixed;left:50%;transform:translateX(-50%);background:rgba(10,26,15,0.92);
+  border:1px solid #1b5e2066;border-radius:14px;padding:16px 22px;backdrop-filter:blur(10px);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);max-width:480px;width:calc(100% - 32px);z-index:5}
+.float-panel.top{top:60px}.float-panel.mid{top:50%;transform:translate(-50%,-50%)}
+.float-panel.bot{bottom:20px}
+.float-panel h2{color:#e8f5e9;font-size:20px;margin-bottom:6px;text-align:center}
+.float-panel p{color:#a5c4a8;font-size:13px;line-height:1.5;text-align:center;margin:4px 0}
+.btn{padding:10px 24px;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;transition:all 0.15s}
+.btn:hover{transform:scale(1.05)}.btn:active{transform:scale(0.98)}
+.btn-gold{background:linear-gradient(135deg,#ffd54f,#ff9800);color:#1a1a00}
+.btn-green{background:linear-gradient(135deg,#66bb6a,#388e3c);color:#fff}
+.btn-dim{background:rgba(102,187,106,0.1);color:#66bb6a;border:1px solid #1b5e20}
+.aha-box{background:linear-gradient(135deg,rgba(255,213,79,0.06),rgba(255,152,0,0.03));
+  border-left:3px solid #ffd54f;padding:12px 14px;border-radius:0 10px 10px 0;margin:10px 0;
+  font-size:12px;line-height:1.7;color:#a5c4a8;text-align:left}
+.aha-box strong{color:#ffd54f}.aha-box .r{color:#4fc3f7}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui"><div class="hud" id="hud" style="display:none"></div><div id="panels"></div></div>
+
+<script>
+// =============================================
+// ENGINE
+// =============================================
+const C = document.getElementById('c'), X = C.getContext('2d');
+let W, H, mx = 0, my = 0, mdown = false, mclick = null, kpress = null;
+const resize = () => { W = C.width = innerWidth; H = C.height = innerHeight; };
+addEventListener('resize', resize); resize();
+addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+addEventListener('mousedown', e => { mdown = true; mclick = {x:e.clientX, y:e.clientY}; });
+addEventListener('mouseup', () => mdown = false);
+addEventListener('keydown', e => { kpress = e.key; });
+addEventListener('touchstart', e => { const t=e.touches[0]; mx=t.clientX; my=t.clientY; mdown=true; mclick={x:mx,y:my}; }, {passive:true});
+addEventListener('touchmove', e => { const t=e.touches[0]; mx=t.clientX; my=t.clientY; }, {passive:true});
+addEventListener('touchend', () => mdown=false);
+
+const lerp=(a,b,t)=>a+(b-a)*t, rand=(a,b)=>a+Math.random()*(b-a), randInt=(a,b)=>Math.floor(rand(a,b));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), ease=t=>t<.5?2*t*t:-1+(4-2*t)*t;
+const dist=(x1,y1,x2,y2)=>Math.sqrt((x2-x1)**2+(y2-y1)**2);
+
+// Particles
+let particles = [];
+class P{constructor(x,y,o={}){this.x=x;this.y=y;this.vx=o.vx||0;this.vy=o.vy||0;this.life=this.ml=o.life||1.5;
+  this.sz=o.sz||3;this.col=o.col||'#66bb6a';this.g=o.g||0;this.gl=o.gl||0}
+  update(dt){this.vy+=this.g*dt;this.x+=this.vx*dt;this.y+=this.vy*dt;this.life-=dt;return this.life>0}
+  draw(){const a=clamp(this.life/this.ml,0,1),s=this.sz*(0.5+0.5*a);if(this.gl){X.shadowBlur=this.gl;X.shadowColor=this.col}
+    X.globalAlpha=a;X.fillStyle=this.col;X.beginPath();X.arc(this.x,this.y,s,0,Math.PI*2);X.fill();X.globalAlpha=1;X.shadowBlur=0}}
+function burst(x,y,n,o={}){for(let i=0;i<n;i++)particles.push(new P(x,y,{vx:rand(-60,60)*(o.sp||1),vy:rand(-80,10)*(o.sp||1),
+  life:rand(.5,1.5)*(o.lm||1),sz:rand(1.5,4)*(o.sm||1),col:o.col||'#66bb6a',g:o.g??30,gl:o.gl||8}))}
+
+// Fireflies
+const FF=Array.from({length:35},()=>({x:rand(0,2e3),y:rand(0,1e3),ph:rand(0,7),sp:rand(.3,1),sz:rand(1,2.5),h:randInt(80,140),dx:rand(-10,10)}));
+
+// Screen shake
+let shakeAmt = 0, shakeDecay = 0.9;
+function shake(amt) { shakeAmt = Math.max(shakeAmt, amt); }
+
+// =============================================
+// SCENE SYSTEM
+// =============================================
+let scene = null, sceneTime = 0, fadeAlpha = 0, fadeTarget = 0, nextScene = null;
+const scenes = {};
+function setScene(name) {
+  if (fadeAlpha > 0.01) return;
+  nextScene = name; fadeTarget = 1;
+}
+function activateScene(name) {
+  scene = name; sceneTime = 0;
+  particles = []; shakeAmt = 0;
+  if (scenes[name] && scenes[name].init) scenes[name].init();
+  updateHud();
+}
+function tip(html) { let d=document.getElementById('tip'); if(!d){d=document.createElement('div');d.id='tip';d.className='tip';document.getElementById('panels').appendChild(d)}d.innerHTML=html;d.style.opacity='1'; }
+function hideTip() { const d=document.getElementById('tip');if(d)d.style.opacity='0'; }
+function setPanel(id,cls,html){let d=document.getElementById(id);if(!d){d=document.createElement('div');d.id=id;d.className='float-panel '+cls;document.getElementById('panels').appendChild(d)}d.innerHTML=html;return d}
+function clearPanels(){document.getElementById('panels').innerHTML='';}
+function updateHud(){const h=document.getElementById('hud');if(scene==='title'){h.style.display='none';return;}
+  h.style.display='flex';const icons=['🐜','🏔️','🌳','🏘️','🔮'],names=['ch1','ch2','ch3','ch4','ch5'];
+  h.innerHTML=icons.map((ic,i)=>`<div class="hud-dot ${completed[i]?'done':''} ${scene===names[i]?'active':''}" onclick="setScene('${names[i]}')">${ic}</div>`).join('');}
+let completed = [false,false,false,false,false];
+
+// =============================================
+// BACKGROUND
+// =============================================
+let bgHue = 130, bgTarget = 130;
+function drawBg(t) {
+  bgHue = lerp(bgHue, bgTarget, 0.02);
+  const g = X.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, `hsl(${bgHue},30%,3%)`);
+  g.addColorStop(0.5, `hsl(${bgHue},25%,5%)`);
+  g.addColorStop(1, `hsl(${bgHue},20%,6%)`);
+  X.fillStyle = g; X.fillRect(0,0,W,H);
+  X.fillStyle = `hsl(${bgHue},20%,4%)`;
+  X.fillRect(0,H*0.88,W,H*0.12);
+  FF.forEach(f => {
+    f.x += f.dx * 0.016; f.y += Math.sin(f.ph + t*f.sp) * 8 * 0.016;
+    if(f.x<-20)f.x=W+20; if(f.x>W+20)f.x=-20;
+    const b = 0.3 + 0.7 * Math.sin(f.ph + t*f.sp*2)**2;
+    X.globalAlpha = b*0.5; X.shadowBlur=10; X.shadowColor=`hsl(${f.h},70%,60%)`;
+    X.fillStyle=`hsl(${f.h},70%,70%)`; X.beginPath(); X.arc(f.x,f.y,f.sz,0,Math.PI*2); X.fill();
+    X.shadowBlur=0; X.globalAlpha=1;
+  });
+}
+
+// =============================================
+// MAIN LOOP
+// =============================================
+let lastT = 0;
+function frame(ts) {
+  const dt = Math.min(0.05, (ts - lastT)/1000); lastT = ts; sceneTime += dt;
+  let sx=0, sy=0;
+  if(shakeAmt > 0.5) { sx=rand(-shakeAmt,shakeAmt); sy=rand(-shakeAmt,shakeAmt); shakeAmt*=shakeDecay; }
+  X.save(); X.translate(sx,sy);
+  drawBg(ts/1000);
+  const s = scenes[scene];
+  if(s) { if(s.update) s.update(dt, ts/1000); if(s.draw) s.draw(dt, ts/1000); }
+  particles = particles.filter(p => { if(p.update(dt)){p.draw();return true} return false; });
+  X.restore();
+  if(fadeTarget > 0) { fadeAlpha = Math.min(1, fadeAlpha + dt*3); if(fadeAlpha >= 1){fadeTarget=0; if(nextScene){activateScene(nextScene);nextScene=null;}} }
+  else if(fadeAlpha > 0) { fadeAlpha = Math.max(0, fadeAlpha - dt*2); }
+  if(fadeAlpha > 0) { X.fillStyle=`rgba(5,13,8,${fadeAlpha})`; X.fillRect(0,0,W,H); }
+  mclick = null; kpress = null;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// =============================================
+// TITLE
+// =============================================
+scenes.title = {
+  init() {
+    bgTarget = 130; clearPanels();
+    setPanel('tp','mid',`
+      <h2 style="font-size:28px;margin-bottom:2px">🌲 The Language Forest</h2>
+      <p style="font-size:15px;color:#4a6b4d;margin-bottom:20px">discover how language models think</p>
+      <div style="text-align:center"><button class="btn btn-gold" style="font-size:16px;padding:12px 36px" onclick="setScene('ch1')">enter the forest</button></div>
+    `);
+  }
+};
+activateScene('title');
+
+// =============================================
+// CHAPTER 1: THE MISCOMMUNICATION
+// =============================================
+const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+let ch1 = {};
+
+scenes.ch1 = {
+  init() {
+    bgTarget = 130; clearPanels();
+    const perm = () => { const a=ALPHA.split(''); for(let i=25;i>0;i--){const j=randInt(0,i+1);[a[i],a[j]]=[a[j],a[i]];} return a; };
+    const cbA = {}, cbB = {};
+    const permA = perm(), permB = perm();
+    for(let i=0;i<26;i++) { cbA[ALPHA[i]] = i; cbB[permB[i]] = i; }
+    const word = ['hello','world','emma','forest','river'][randInt(0,5)];
+    const encoded = word.split('').map(c => cbA[c]);
+    const decoded = encoded.map(n => { for(let c in cbB) if(cbB[c]===n) return c; return '?'; }).join('');
+    ch1 = { phase:1, cbA, cbB, word, encoded, decoded, ants:[], antsDone:false, showMismatch:false,
+            sharedCB:{}, fixCount:0,
+            bpeWord:'the cat sat on the mat', bpeTokens:[], mergeCount:0 };
+    ch1.ants = encoded.map((n,i) => ({
+      n, fromChar: word[i], toChar: decoded[i],
+      x: W*0.15, y: H*0.5 + (i-2)*30,
+      tx: W*0.85, ty: H*0.5 + (i-2)*30,
+      progress: 0, arrived: false, delay: i*0.35
+    }));
+    tip('two ant colonies need to talk. <span class="hl">click anywhere</span> to send the message.');
+  },
+
+  update(dt, t) {
+    // Phase 1: click to start ants marching
+    if(ch1.phase === 1 && !ch1.started && mclick) {
+      ch1.started = true;
+    }
+  },
+
+  draw(dt, t) {
+    X.font = 'bold 14px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#66bb6a'; X.fillText('Colony A', W*0.15, H*0.3);
+    X.fillStyle = '#4fc3f7'; X.fillText('Colony B', W*0.85, H*0.3);
+
+    if(ch1.phase === 1) this.drawPhase1(dt, t);
+    else if(ch1.phase === 2) this.drawPhase2(dt, t);
+    else if(ch1.phase === 3) this.drawPhase3(dt, t);
+  },
+
+  drawPhase1(dt, t) {
+    const w = ch1.word, d = ch1.decoded;
+    X.font = 'bold 24px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#e8f5e9'; X.fillText('"'+w+'"', W*0.15, H*0.38);
+
+    if(!ch1.started) return;
+
+    let allArrived = true;
+    ch1.ants.forEach((a, i) => {
+      if(sceneTime < a.delay + 0.3) { allArrived = false; return; }
+      const elapsed = sceneTime - a.delay - 0.3;
+      a.progress = clamp(elapsed / 1.8, 0, 1);
+      const p = ease(a.progress);
+      const cx = lerp(a.x, a.tx, p);
+      const cy = a.y + Math.sin(t*6+i)*4;
+      if(a.progress < 1) allArrived = false;
+      else a.arrived = true;
+
+      X.fillStyle = '#5d4037';
+      X.beginPath(); X.ellipse(cx,cy,6,4,0,0,Math.PI*2); X.fill();
+      const orbCol = 'hsl('+(a.n*14)+',70%,60%)';
+      X.shadowBlur=8; X.shadowColor=orbCol; X.fillStyle=orbCol;
+      X.beginPath(); X.arc(cx,cy-8,5,0,Math.PI*2); X.fill(); X.shadowBlur=0;
+      X.fillStyle='#000'; X.font='bold 7px sans-serif'; X.textAlign='center';
+      X.fillText(a.n, cx, cy-6);
+      if(a.progress < 1 && Math.random()<0.2) particles.push(new P(cx,cy+4,{sz:1,life:0.5,col:orbCol+'66',gl:4}));
+    });
+
+    if(allArrived && !ch1.antsDone) {
+      ch1.antsDone = true;
+      shake(6);
+      burst(W*0.85, H*0.45, 15, {col:'#ef5350', sp:0.8});
+      tip('the message arrived as <span style="color:#ef5350;font-weight:700">"'+d+'"</span> — wrong! <span class="hl">hover over the ants</span> to see why.');
+    }
+
+    if(ch1.antsDone) {
+      X.font = 'bold 24px sans-serif'; X.textAlign = 'center';
+      X.fillStyle = '#ef5350'; X.fillText('"'+d+'"', W*0.85, H*0.38);
+      X.font = '16px sans-serif'; X.fillStyle = '#ef535088'; X.fillText('wrong!', W*0.85, H*0.44);
+
+      ch1.ants.forEach((a, i) => {
+        if(dist(mx,my,a.tx,a.ty) < 30) {
+          X.fillStyle = 'rgba(10,26,15,0.92)';
+          const bx = clamp(mx+10, 0, W-190), by = clamp(my-50, 0, H-60);
+          X.fillRect(bx, by, 185, 55);
+          X.strokeStyle = '#ffd54f'; X.lineWidth=1; X.strokeRect(bx, by, 185, 55);
+          X.font = '12px sans-serif'; X.textAlign = 'left';
+          X.fillStyle = '#66bb6a'; X.fillText('Colony A: "'+a.fromChar+'" = scent '+a.n, bx+10, by+18);
+          X.fillStyle = '#ef5350'; X.fillText('Colony B: scent '+a.n+' = "'+a.toChar+'"', bx+10, by+34);
+          X.fillStyle = '#ffd54f'; X.font = '11px sans-serif';
+          X.fillText('different codebooks!', bx+10, by+48);
+          if(!ch1.showMismatch) { ch1.showMismatch = true;
+            setTimeout(()=>tip('they have <span class="hl">different codebooks</span>! same number, different letter. <button class="btn btn-green" style="padding:6px 16px;font-size:12px;margin-left:8px" onclick="ch1StartFix()">fix it</button>'), 500);
+          }
+        }
+      });
+    }
+  },
+
+  drawPhase2(dt, t) {
+    const cols = 13, cellW = 28, cellH = 32, gap = 2;
+    const startXA = W*0.05, startXB = W*0.55, startY = H*0.3;
+
+    X.font = 'bold 12px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#66bb6a'; X.fillText("Colony A's codebook", W*0.25, startY-10);
+    X.fillStyle = '#4fc3f7'; X.fillText("Colony B's codebook", W*0.75, startY-10);
+
+    ALPHA.split('').forEach((c, i) => {
+      const row = Math.floor(i/cols), col = i%cols;
+      const xA = startXA + col*(cellW+gap), yA = startY + row*(cellH+gap);
+      const xB = startXB + col*(cellW+gap), yB = startY + row*(cellH+gap);
+      const fixed = ch1.sharedCB[c] !== undefined;
+
+      X.fillStyle = fixed ? 'rgba(102,187,106,0.15)' : 'rgba(102,187,106,0.05)';
+      X.fillRect(xA,yA,cellW,cellH);
+      X.strokeStyle = fixed ? '#66bb6a' : '#1b5e20'; X.lineWidth=1; X.strokeRect(xA,yA,cellW,cellH);
+      X.fillStyle = '#e8f5e9'; X.font = 'bold 13px sans-serif'; X.fillText(c, xA+cellW/2, yA+14);
+      X.fillStyle = '#ffd54f'; X.font = '10px sans-serif'; X.fillText(ch1.cbA[c], xA+cellW/2, yA+26);
+
+      X.fillStyle = fixed ? 'rgba(79,195,247,0.15)' : 'rgba(79,195,247,0.05)';
+      X.fillRect(xB,yB,cellW,cellH);
+      X.strokeStyle = fixed ? '#4fc3f7' : '#1b5e2066'; X.lineWidth=1; X.strokeRect(xB,yB,cellW,cellH);
+      X.fillStyle = '#e8f5e9'; X.font = 'bold 13px sans-serif'; X.fillText(c, xB+cellW/2, yB+14);
+      X.fillStyle = '#ffd54f'; X.font = '10px sans-serif'; X.fillText(ch1.cbB[c], xB+cellW/2, yB+26);
+
+      if(!fixed && mx>xA && mx<xA+cellW && my>yA && my<yA+cellH) {
+        X.strokeStyle = '#ffd54f'; X.lineWidth=2; X.strokeRect(xA-1,yA-1,cellW+2,cellH+2);
+      }
+    });
+
+    const sharedY = H*0.72;
+    X.fillStyle = '#ffd54f'; X.font = 'bold 13px sans-serif'; X.textAlign = 'center';
+    X.fillText('shared codebook: '+ch1.fixCount+'/26', W/2, sharedY);
+    X.fillStyle = '#1b5e20'; X.fillRect(W*0.3, sharedY+8, W*0.4, 8);
+    X.fillStyle = '#66bb6a'; X.fillRect(W*0.3, sharedY+8, W*0.4*(ch1.fixCount/26), 8);
+
+    if(mclick) {
+      ALPHA.split('').forEach((c, i) => {
+        if(ch1.sharedCB[c] !== undefined) return;
+        const row = Math.floor(i/cols), col = i%cols;
+        const xA = startXA + col*(cellW+gap), yA = startY + row*(cellH+gap);
+        if(mclick.x>xA && mclick.x<xA+cellW && mclick.y>yA && mclick.y<yA+cellH) {
+          ch1.sharedCB[c] = ch1.cbA[c];
+          ch1.fixCount++;
+          burst(xA+cellW/2, yA+cellH/2, 5, {col:'#66bb6a',sp:0.3});
+          if(ch1.fixCount >= 26) {
+            burst(W/2, H/2, 30, {col:'#ffd54f',sp:2,gl:15,sm:1.5});
+            setTimeout(() => ch1StartBPE(), 600);
+          }
+        }
+      });
+    }
+  },
+
+  drawPhase3(dt, t) {
+    const tokens = ch1.bpeTokens;
+    const maxVisible = Math.min(tokens.length, Math.floor((W*0.85)/44));
+    const tokenW = Math.min(44, (W*0.85)/tokens.length);
+    const startX = (W - tokens.length*tokenW)/2;
+    const y = H*0.4;
+
+    // Ant counter
+    X.font = 'bold 16px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#6b8f6e';
+    X.fillText('ants needed: '+tokens.length, W/2, H*0.22);
+    // Original count
+    X.font = '12px sans-serif'; X.fillStyle = '#4a6b4d';
+    X.fillText('(started with '+ch1.bpeWord.length+')', W/2, H*0.26);
+
+    tokens.forEach((tok, i) => {
+      const x = startX + i*tokenW;
+      const bounce = Math.sin(t*3+i*0.5)*3;
+      // Ant
+      X.fillStyle = '#5d4037';
+      X.beginPath(); X.ellipse(x+tokenW/2, y+24+bounce, 4, 2.5, 0, 0, Math.PI*2); X.fill();
+      // Token orb
+      const col = tok.length > 1 ? '#ffd54f' : '#4fc3f7';
+      const orbW = Math.max(tokenW-6, 20);
+      X.shadowBlur=6; X.shadowColor=col; X.fillStyle=col+'22';
+      X.fillRect(x+3, y-4+bounce, orbW, 22); X.shadowBlur=0;
+      X.strokeStyle=col+'88'; X.lineWidth=1; X.strokeRect(x+3, y-4+bounce, orbW, 22);
+      X.fillStyle='#e8f5e9'; X.font='bold '+(tok.length>2?'9':'11')+'px sans-serif'; X.textAlign='center';
+      X.fillText(tok, x+tokenW/2, y+12+bounce);
+    });
+
+    // Merge zones
+    for(let i=0;i<tokens.length-1;i++) {
+      const x = startX + (i+1)*tokenW;
+      const hover = mx > x-10 && mx < x+10 && my > y-20 && my < y+40;
+      if(hover) {
+        X.fillStyle = 'rgba(255,213,79,0.15)';
+        X.fillRect(startX+i*tokenW, y-10, tokenW*2, 40);
+        X.strokeStyle = '#ffd54f44'; X.setLineDash([3,3]); X.lineWidth=1;
+        X.strokeRect(startX+i*tokenW, y-10, tokenW*2, 40);
+        X.setLineDash([]);
+        X.font = '14px sans-serif'; X.fillStyle = '#ffd54f'; X.textAlign = 'center';
+        X.fillText('merge', x, y-14);
+      }
+      if(mclick && mclick.x>x-10 && mclick.x<x+10 && mclick.y>y-20 && mclick.y<y+40) {
+        const merged = tokens[i] + tokens[i+1];
+        tokens.splice(i, 2, merged);
+        ch1.mergeCount++;
+        burst(x, y+10, 10, {col:'#ffd54f',sp:0.5});
+        if(tokens.length <= Math.ceil(ch1.bpeWord.length * 0.5)) {
+          setTimeout(() => ch1ShowAha(), 500);
+        }
+      }
+    }
+  }
+};
+
+function ch1StartFix() {
+  ch1.phase = 2; clearPanels();
+  tip('click letters in Colony A to agree on their codes. build a <span class="hl">shared codebook</span>.');
+}
+
+function ch1StartBPE() {
+  ch1.phase = 3; clearPanels();
+  ch1.bpeTokens = ch1.bpeWord.split('');
+  tip(ch1.bpeTokens.length+' ants for one sentence! <span class="hl">click between letters</span> to merge them. fewer ants = faster.');
+}
+
+function ch1ShowAha() {
+  clearPanels();
+  setPanel('ch1aha','mid',`
+    <h2>you just built a tokenizer</h2>
+    <div class="aha-box">
+      the <strong>miscommunication</strong> = why every model needs a fixed vocabulary<br>
+      the <strong>shared codebook</strong> = the tokenizer's vocabulary (token to ID)<br>
+      <strong>merging pairs</strong> = Byte-Pair Encoding (BPE) — exactly how GPT builds its vocabulary<br>
+      <span class="r">GPT-4 uses ~100K merged tokens instead of single characters. same idea, bigger scale.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[0]=true;setScene('ch2')">continue</button>
+    </div>
+  `);
+}
+
+// =============================================
+// CHAPTER 2: BLIND DESCENT
+// =============================================
+let ch2 = {};
+
+function makeTerrain() {
+  const bumps = [
+    {x:0.25,y:0.3,h:3.5,s:0.02}, {x:0.7,y:0.2,h:2.8,s:0.025},
+    {x:0.15,y:0.7,h:2.0,s:0.015}, {x:0.8,y:0.75,h:1.5,s:0.02},
+    {x:0.5,y:0.5,h:-1.5,s:0.012},
+    {x:0.75,y:0.65,h:-4.0,s:0.018},
+  ];
+  return (x,y) => {
+    let v = 2;
+    bumps.forEach(b => v += b.h * Math.exp(-((x-b.x)**2+(y-b.y)**2)/b.s));
+    v += Math.sin(x*12)*Math.cos(y*10)*0.15;
+    return v;
+  };
+}
+
+scenes.ch2 = {
+  init() {
+    bgTarget = 200; clearPanels();
+    const terrain = makeTerrain();
+    const tileSize = 4;
+    const cols = Math.ceil(W/tileSize), rows = Math.ceil(H/tileSize);
+    const offC = document.createElement('canvas');
+    offC.width = W; offC.height = H;
+    const oX = offC.getContext('2d');
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) {
+      const nx = c/cols, ny = r/rows;
+      const v = terrain(nx, ny);
+      const tt = clamp((v+2)/6, 0, 1);
+      let r2,g2,b2;
+      if(tt < 0.3) { r2=20; g2=lerp(200,100,tt/0.3); b2=lerp(220,180,tt/0.3); }
+      else if(tt < 0.6) { r2=lerp(20,200,(tt-0.3)/0.3); g2=lerp(100,200,(tt-0.3)/0.3); b2=lerp(180,50,(tt-0.3)/0.3); }
+      else { r2=lerp(200,230,(tt-0.6)/0.4); g2=lerp(200,60,(tt-0.6)/0.4); b2=lerp(50,40,(tt-0.6)/0.4); }
+      oX.fillStyle = `rgb(${r2|0},${g2|0},${b2|0})`;
+      oX.fillRect(c*tileSize, r*tileSize, tileSize, tileSize);
+    }
+    const fogC = document.createElement('canvas');
+    fogC.width = W; fogC.height = H;
+    const fX = fogC.getContext('2d');
+    fX.fillStyle = '#050d08'; fX.fillRect(0,0,W,H);
+
+    ch2 = { terrain, offC, fogC, fX,
+      px: W*0.2, py: H*0.3,
+      vx:0, vy:0, momentum: false, trail:[],
+      globalMin: {x:0.75*W, y:0.65*H}, found:false, stuckTime:0, showMomentum:false };
+    tip('you are lost in fog on a mountain. <span class="hl">click and drag</span> to walk. find the lowest valley.');
+    ch2.fX.globalCompositeOperation = 'destination-out';
+    const gr = ch2.fX.createRadialGradient(ch2.px,ch2.py,0,ch2.px,ch2.py,50);
+    gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    ch2.fX.fillStyle = gr;
+    ch2.fX.beginPath(); ch2.fX.arc(ch2.px,ch2.py,50,0,Math.PI*2); ch2.fX.fill();
+    ch2.fX.globalCompositeOperation = 'source-over';
+  },
+
+  update(dt, t) {
+    const c = ch2;
+    if(c.found) return;
+    const speed = c.momentum ? 200 : 120;
+    const friction = c.momentum ? 0.97 : 0.85;
+
+    if(mdown) {
+      const dx = mx - c.px, dy = my - c.py;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if(d > 5) { c.vx += (dx/d)*speed*dt; c.vy += (dy/d)*speed*dt; }
+    }
+
+    const nx = c.px/W, ny = c.py/H, eps = 0.003;
+    const gx = (c.terrain(nx+eps,ny) - c.terrain(nx-eps,ny)) / (2*eps);
+    const gy = (c.terrain(nx,ny+eps) - c.terrain(nx,ny-eps)) / (2*eps);
+    c.vx -= gx * 15 * dt;
+    c.vy -= gy * 15 * dt;
+    c.vx *= friction; c.vy *= friction;
+    c.px = clamp(c.px + c.vx*dt, 20, W-20);
+    c.py = clamp(c.py + c.vy*dt, 20, H-20);
+
+    c.fX.globalCompositeOperation = 'destination-out';
+    const revealR = c.momentum ? 60 : 40;
+    const gr = c.fX.createRadialGradient(c.px,c.py,0,c.px,c.py,revealR);
+    gr.addColorStop(0,'rgba(0,0,0,1)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    c.fX.fillStyle = gr;
+    c.fX.beginPath(); c.fX.arc(c.px,c.py,revealR,0,Math.PI*2); c.fX.fill();
+    c.fX.globalCompositeOperation = 'source-over';
+
+    c.trail.push({x:c.px,y:c.py});
+    if(c.trail.length > 500) c.trail.shift();
+
+    const vel = Math.sqrt(c.vx*c.vx+c.vy*c.vy);
+    const atGlobal = dist(c.px,c.py,c.globalMin.x,c.globalMin.y) < 40;
+    if(vel < 3 && !mdown && !atGlobal) {
+      c.stuckTime += dt;
+      if(c.stuckTime > 2.5 && !c.showMomentum) {
+        c.showMomentum = true;
+        tip('stuck in a <span style="color:#ef5350">local minimum</span>! press <span class="hl">M</span> for momentum to roll through small valleys.');
+      }
+    } else { c.stuckTime = 0; }
+
+    if(atGlobal) {
+      c.found = true;
+      burst(c.px, c.py, 40, {col:'#4fc3f7',sp:2,gl:20,sm:1.5,lm:2});
+      setTimeout(() => ch2ShowAha(), 500);
+    }
+
+    if(kpress === 'm' || kpress === 'M') {
+      c.momentum = !c.momentum;
+      tip(c.momentum ? '<span class="gr">momentum ON</span> — you carry inertia now. build speed!' : 'momentum off.');
+    }
+  },
+
+  draw(dt, t) {
+    const c = ch2;
+    X.drawImage(c.offC, 0, 0);
+    X.drawImage(c.fogC, 0, 0);
+
+    if(c.trail.length > 1) {
+      X.strokeStyle = 'rgba(255,213,79,0.25)'; X.lineWidth = 2; X.beginPath();
+      c.trail.forEach((p,i) => i===0 ? X.moveTo(p.x,p.y) : X.lineTo(p.x,p.y));
+      X.stroke();
+    }
+
+    X.shadowBlur = 15;
+    X.shadowColor = c.momentum ? '#ffd54f' : '#e8f5e9';
+    X.fillStyle = c.momentum ? '#ffd54f' : '#e8f5e9';
+    X.beginPath(); X.arc(c.px, c.py, 8, 0, Math.PI*2); X.fill();
+    X.shadowBlur = 0;
+
+    // Gradient arrow
+    const nx = c.px/W, ny = c.py/H, eps=0.003;
+    const gx = (c.terrain(nx+eps,ny) - c.terrain(nx-eps,ny)) / (2*eps);
+    const gy = (c.terrain(nx,ny+eps) - c.terrain(nx,ny-eps)) / (2*eps);
+    const gm = Math.sqrt(gx*gx+gy*gy);
+    if(gm > 0.1) {
+      const ax = c.px - (gx/gm)*25, ay = c.py - (gy/gm)*25;
+      X.strokeStyle = 'rgba(255,213,79,0.35)'; X.lineWidth = 2;
+      X.beginPath(); X.moveTo(c.px,c.py); X.lineTo(ax,ay); X.stroke();
+      X.fillStyle = 'rgba(255,213,79,0.35)';
+      X.beginPath(); X.arc(ax,ay,4,0,Math.PI*2); X.fill();
+    }
+
+    const alt = c.terrain(nx, ny);
+    X.fillStyle = 'rgba(10,26,15,0.8)'; X.fillRect(10, H-40, 130, 28);
+    X.fillStyle = alt < 0 ? '#4fc3f7' : '#ef9a9a';
+    X.font = 'bold 13px sans-serif'; X.textAlign = 'left';
+    X.fillText('altitude: '+ alt.toFixed(1), 18, H-22);
+  }
+};
+
+function ch2ShowAha() {
+  clearPanels();
+  setPanel('ch2aha','mid',`
+    <h2>you just did gradient descent</h2>
+    <div class="aha-box">
+      the <strong>foggy mountain</strong> = the loss landscape (you can't see it all)<br>
+      <strong>walking downhill</strong> = following the gradient<br>
+      getting <strong>stuck</strong> = local minimum (looks good, isn't the best)<br>
+      <strong>momentum</strong> = SGD with momentum (carries past small bumps)<br>
+      <span class="r">real training uses Adam optimizer — momentum + adaptive step sizes. same instinct.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[1]=true;setScene('ch3')">continue</button>
+    </div>
+  `);
+}
+
+// =============================================
+// CHAPTER 3: WORD DETECTIVE (ATTENTION)
+// =============================================
+let ch3 = {};
+
+scenes.ch3 = {
+  init() {
+    bgTarget = 270; clearPanels();
+    const s = {
+      words: ['The','trophy','doesnt','fit','in','the','suitcase','because','it','is','too','big'],
+      blankIdx: 8, relevantIdx: [1,6,11]
+    };
+    ch3 = { sentence: s, selected: new Set(), revealed: false, wordPositions: [] };
+    tip('what does <span class="hl">"it"</span> refer to? <span class="hl">click the words</span> that help you decide.');
+  },
+
+  update(dt, t) {
+    if(mclick && !ch3.revealed) {
+      ch3.wordPositions.forEach(({i, x, y, w}) => {
+        if(mclick.x > x-4 && mclick.x < x+w+4 && mclick.y > y-22 && mclick.y < y+8) {
+          if(ch3.selected.has(i)) ch3.selected.delete(i);
+          else { ch3.selected.add(i); burst(x+w/2, y-5, 6, {col:'#b39ddb',sp:0.3}); }
+          const found = ch3.sentence.relevantIdx.every(ri => ch3.selected.has(ri));
+          if(found && !ch3.revealed) {
+            ch3.revealed = true;
+            burst(W/2, H*0.65, 25, {col:'#b39ddb',sp:1.5,gl:15});
+            setTimeout(() => tip('<span class="gr">yes!</span> "trophy", "suitcase", and "big" are the keys to understanding "it". <button class="btn btn-green" style="padding:5px 14px;font-size:12px;margin-left:6px" onclick="ch3ShowAha()">see why</button>'), 300);
+          }
+        }
+      });
+    }
+  },
+
+  draw(dt, t) {
+    const s = ch3.sentence;
+    const y = H*0.4;
+    let cx = W*0.06;
+    const queryX = W/2, queryY = H*0.65;
+    ch3.wordPositions = [];
+
+    X.font = 'bold 20px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#b39ddb';
+    X.fillText('"it" = ?', queryX, queryY);
+
+    s.words.forEach((w, i) => {
+      X.font = 'bold 17px sans-serif'; X.textAlign = 'left';
+      const ww = X.measureText(w).width;
+      ch3.wordPositions.push({i, x:cx, y, w:ww});
+
+      const isSelected = ch3.selected.has(i);
+      const isRelevant = s.relevantIdx.includes(i);
+      const isBlank = i === s.blankIdx;
+      const hover = mx>cx-4 && mx<cx+ww+4 && my>y-22 && my<y+8;
+
+      if(isSelected) {
+        const strength = isRelevant ? 0.7 : 0.15;
+        X.strokeStyle = 'rgba(179,157,219,'+strength+')';
+        X.lineWidth = isRelevant ? 3 : 1;
+        if(isRelevant) { X.shadowBlur=10; X.shadowColor='#b39ddb'; }
+        X.beginPath();
+        X.moveTo(cx+ww/2, y+5);
+        X.quadraticCurveTo(cx+ww/2, queryY-25, queryX, queryY-12);
+        X.stroke();
+        X.shadowBlur = 0;
+        if(isRelevant && Math.random()<0.08) {
+          const f = Math.random();
+          particles.push(new P(lerp(cx+ww/2,queryX,f), lerp(y+5,queryY-12,f), {sz:1.5,life:0.4,col:'#b39ddb',gl:6}));
+        }
+      }
+
+      if(isBlank) { X.fillStyle='rgba(179,157,219,0.15)'; X.fillRect(cx-4,y-18,ww+8,28); }
+      else if(isSelected) { X.fillStyle=isRelevant?'rgba(179,157,219,0.2)':'rgba(239,83,80,0.08)'; X.fillRect(cx-4,y-18,ww+8,28); }
+      else if(hover) { X.fillStyle='rgba(255,255,255,0.04)'; X.fillRect(cx-4,y-18,ww+8,28); }
+
+      X.fillStyle = isBlank ? '#b39ddb' : isSelected ? (isRelevant?'#e8f5e9':'#7a9a7e') : (hover?'#a5c4a8':'#5a7a5e');
+      X.fillText(w, cx, y);
+      cx += ww + 10;
+    });
+  }
+};
+
+function ch3ShowAha() {
+  clearPanels();
+  setPanel('ch3aha','mid',`
+    <h2>you just computed attention</h2>
+    <div class="aha-box">
+      <strong>clicking relevant words</strong> = computing attention weights (Q*K similarity)<br>
+      <strong>bright connections</strong> = high attention, <strong>dim</strong> = low attention<br>
+      the <strong>query</strong> ("it") looks at every word's <strong>key</strong> and decides who to listen to<br>
+      <span class="r">transformers do this for every word simultaneously, with multiple "heads" asking different questions.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[2]=true;setScene('ch4')">continue</button>
+    </div>
+  `);
+}
+
+// =============================================
+// CHAPTER 4: YOU ARE THE MODEL
+// =============================================
+let ch4 = {};
+const TRAIN_WORDS = ['emma','olivia','liam','noah','ava','sophia','mia','ella','aria','riley','chloe'];
+const TEST_WORDS = ['zephyr','quartz','axiom','fjord'];
+
+scenes.ch4 = {
+  init() {
+    bgTarget = 30; clearPanels();
+    ch4 = { round:0, maxRounds:30, correct:0, total:0, history:[],
+            currentContext:'', currentAnswer:'', phase:'play',
+            testRound:0, testCorrect:0, testTotal:0, streak:0, waiting:false };
+    this.nextRound();
+    tip('you ARE the language model. see the letters, <span class="hl">press a key</span> to guess what comes next.');
+  },
+
+  nextRound() {
+    if(ch4.round >= ch4.maxRounds) {
+      ch4.phase = 'test';
+      tip('<span style="color:#ef5350">NEW WORDS</span> you have never seen! keep guessing.');
+      this.nextTestRound();
+      return;
+    }
+    const word = TRAIN_WORDS[ch4.round % TRAIN_WORDS.length];
+    const pos = randInt(0, word.length - 1);
+    ch4.currentContext = word.slice(0, pos + 1);
+    ch4.currentAnswer = word[pos + 1];
+    if(!ch4.currentAnswer) { ch4.round++; this.nextRound(); return; }
+    ch4.round++;
+    ch4.waiting = false;
+  },
+
+  nextTestRound() {
+    if(ch4.testRound >= 8) { ch4ShowOverfit(); return; }
+    const word = TEST_WORDS[ch4.testRound % TEST_WORDS.length];
+    const pos = randInt(0, word.length - 1);
+    ch4.currentContext = word.slice(0, pos + 1);
+    ch4.currentAnswer = word[pos + 1];
+    if(!ch4.currentAnswer) { ch4.testRound++; this.nextTestRound(); return; }
+    ch4.testRound++;
+    ch4.waiting = false;
+  },
+
+  update(dt, t) {
+    if(ch4.waiting) return;
+    if(kpress && kpress.length === 1 && ALPHA.includes(kpress.toLowerCase())) {
+      const guess = kpress.toLowerCase();
+      const correct = guess === ch4.currentAnswer;
+      ch4.total++;
+      if(ch4.phase === 'test') { ch4.testTotal++; if(correct) ch4.testCorrect++; }
+      if(correct) { ch4.correct++; ch4.streak++; burst(W/2, H*0.38, 8, {col:'#66bb6a',sp:0.4}); }
+      else { ch4.streak = 0; shake(3); burst(W/2, H*0.38, 5, {col:'#ef5350',sp:0.3}); }
+      ch4.history.push({ctx:ch4.currentContext, ans:ch4.currentAnswer, guess, correct, phase:ch4.phase});
+      ch4.lastGuess = guess; ch4.lastCorrect = correct; ch4.waiting = true;
+      setTimeout(() => {
+        if(ch4.phase === 'test') this.nextTestRound();
+        else this.nextRound();
+      }, 350);
+    }
+  },
+
+  draw(dt, t) {
+    // Context
+    X.font = 'bold 52px monospace'; X.textAlign = 'center';
+    X.fillStyle = '#e8f5e9';
+    X.fillText(ch4.currentContext, W/2, H*0.38);
+
+    // Cursor
+    if(Math.sin(t*4) > 0) {
+      const tw = X.measureText(ch4.currentContext).width;
+      X.fillStyle = '#ffd54f';
+      X.fillRect(W/2 + tw/2 + 6, H*0.3, 3, 40);
+    }
+
+    // Last guess feedback
+    if(ch4.waiting && ch4.lastGuess) {
+      const gx = W/2 + X.measureText(ch4.currentContext).width/2 + 20;
+      X.font = 'bold 52px monospace';
+      X.fillStyle = ch4.lastCorrect ? '#66bb6a' : '#ef5350';
+      X.fillText(ch4.lastGuess, gx, H*0.38);
+      if(!ch4.lastCorrect) {
+        X.fillStyle = '#66bb6a44'; X.font = 'bold 28px monospace';
+        X.fillText('('+ch4.currentAnswer+')', gx + 40, H*0.38);
+      }
+    }
+
+    X.font = '14px sans-serif'; X.fillStyle = '#4a6b4d'; X.textAlign = 'center';
+    X.fillText('press a letter key', W/2, H*0.48);
+
+    // Score
+    const pct = ch4.total > 0 ? Math.round(ch4.correct/ch4.total*100) : 0;
+    X.font = 'bold 15px sans-serif'; X.textAlign = 'left';
+    X.fillStyle = '#ffd54f'; X.fillText('accuracy: '+pct+'%', 20, 70);
+    X.fillStyle = '#66bb6a'; X.fillText('streak: '+ch4.streak, 20, 90);
+
+    if(ch4.phase === 'test') {
+      X.fillStyle = '#ef5350'; X.font = 'bold 14px sans-serif'; X.textAlign = 'center';
+      X.fillText('NEW WORDS — never seen before!', W/2, H*0.18);
+    }
+
+    // Rolling accuracy graph
+    if(ch4.history.length > 4) {
+      const gX = W*0.65, gY = 55, gW = W*0.3, gH = 70;
+      X.fillStyle = 'rgba(10,26,15,0.6)'; X.fillRect(gX,gY,gW,gH);
+      X.strokeStyle = '#1b5e2044'; X.lineWidth=1; X.strokeRect(gX,gY,gW,gH);
+      const win = 5;
+      X.beginPath(); X.strokeStyle = '#66bb6a'; X.lineWidth = 2;
+      for(let i=win;i<ch4.history.length;i++) {
+        const slice = ch4.history.slice(i-win,i);
+        const acc = slice.filter(h=>h.correct).length / win;
+        const x = gX + gW * (i/(Math.max(ch4.history.length-1,1)));
+        const y = gY + gH * (1-acc);
+        if(i===win) X.moveTo(x,y); else X.lineTo(x,y);
+      }
+      X.stroke();
+      const trainEnd = ch4.history.findIndex(h => h.phase==='test');
+      if(trainEnd > 0) {
+        const bx = gX + gW * (trainEnd/(ch4.history.length-1));
+        X.strokeStyle = '#ef535066'; X.setLineDash([3,3]);
+        X.beginPath(); X.moveTo(bx,gY); X.lineTo(bx,gY+gH); X.stroke(); X.setLineDash([]);
+        X.fillStyle = '#ef5350'; X.font = '10px sans-serif'; X.textAlign = 'center';
+        X.fillText('new words', bx, gY-3);
+      }
+      X.fillStyle = '#4a6b4d'; X.font = '10px sans-serif'; X.textAlign = 'left';
+      X.fillText('your accuracy', gX, gY-3);
+    }
+
+    // Recent history
+    const recent = ch4.history.slice(-8);
+    const ry = H*0.58;
+    recent.forEach((h, i) => {
+      const x = W/2 - (recent.length-1)*40/2 + i*40;
+      X.fillStyle = h.correct ? 'rgba(102,187,106,0.12)' : 'rgba(239,83,80,0.08)';
+      X.fillRect(x-16, ry, 32, 40);
+      X.strokeStyle = h.correct ? '#66bb6a44' : '#ef535044'; X.lineWidth=1;
+      X.strokeRect(x-16, ry, 32, 40);
+      X.font = '9px sans-serif'; X.textAlign = 'center';
+      X.fillStyle = '#4a6b4d'; X.fillText(h.ctx, x, ry+14);
+      X.font = 'bold 13px sans-serif';
+      X.fillStyle = h.correct ? '#66bb6a' : '#ef5350';
+      X.fillText(h.guess, x, ry+30);
+    });
+  }
+};
+
+function ch4ShowOverfit() {
+  clearPanels();
+  const trainTotal = ch4.history.filter(h=>h.phase==='play').length;
+  const trainCorr = ch4.history.filter(h=>h.phase==='play'&&h.correct).length;
+  burst(W/2, H/2, 25, {col:'#ffd54f',sp:1.5,gl:15});
+  setPanel('ch4aha','mid',`
+    <h2>you just experienced overfitting</h2>
+    <p style="color:#66bb6a">training accuracy: ${Math.round(trainCorr/Math.max(1,trainTotal)*100)}%</p>
+    <p style="color:#ef5350">new words accuracy: ${Math.round(ch4.testCorrect/Math.max(1,ch4.testTotal)*100)}%</p>
+    <div class="aha-box">
+      you <strong>memorized patterns</strong> — after "emm" you knew "a"<br>
+      but <strong>new words failed</strong> because you learned the data, not the rules<br>
+      that's <strong>overfitting</strong> — memorize instead of generalize<br>
+      <span class="r">the accuracy drop you felt? that's the train/test gap. real LLMs use diverse data and regularization to fight it.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[3]=true;setScene('ch5')">continue</button>
+    </div>
+  `);
+}
+
+// =============================================
+// CHAPTER 5: PROBABILITY MOUNTAINS
+// =============================================
+let ch5 = {};
+
+scenes.ch5 = {
+  init() {
+    bgTarget = 260; clearPanels();
+    const model = {};
+    for(let i=0;i<27;i++){model[i]={};for(let j=0;j<27;j++)model[i][j]=1;}
+    for(let r=0;r<100;r++) TRAIN_WORDS.forEach(w => {
+      const tok = [26,...w.split('').map(c=>ALPHA.indexOf(c)),26];
+      for(let i=0;i<tok.length-1;i++) model[tok[i]][tok[i+1]]+=3;
+    });
+    ch5 = { model, temp:1.0, context:[26], generated:'', names:[], probs:[], sampledIdx:-1, animating:false };
+    this.computeProbs();
+    tip('mountains = probability of each letter. <span class="hl">click a peak</span> to pick it. <span class="hl">space</span> to auto-sample. <span class="hl">up/down</span> = temperature.');
+  },
+
+  computeProbs() {
+    const last = ch5.context[ch5.context.length-1];
+    const counts = ch5.model[last];
+    const total = Object.values(counts).reduce((a,b)=>a+b,0);
+    const raw = [];
+    for(let i=0;i<27;i++) raw.push(Math.pow(counts[i]/total, 1/ch5.temp));
+    const sum = raw.reduce((a,b)=>a+b,0);
+    ch5.probs = raw.map(r=>r/sum);
+    ch5.sampledIdx = -1;
+  },
+
+  update(dt, t) {
+    if(kpress === 'ArrowUp') { ch5.temp = clamp(ch5.temp + 0.15, 0.2, 3.0); this.computeProbs(); }
+    if(kpress === 'ArrowDown') { ch5.temp = clamp(ch5.temp - 0.15, 0.2, 3.0); this.computeProbs(); }
+
+    if(mclick && !ch5.animating) {
+      const barW = (W*0.8)/27, startX = W*0.1;
+      const idx = Math.floor((mclick.x - startX) / barW);
+      if(idx >= 0 && idx < 27 && mclick.y > H*0.15 && mclick.y < H*0.75) this.doSample(idx);
+    }
+
+    if(kpress === ' ' && !ch5.animating) {
+      let r = Math.random(), idx = 0;
+      for(let i=0;i<27;i++) { r -= ch5.probs[i]; if(r<=0){idx=i;break;} }
+      this.doSample(idx);
+    }
+  },
+
+  doSample(idx) {
+    ch5.sampledIdx = idx; ch5.animating = true;
+    const barW = (W*0.8)/27, startX = W*0.1;
+    burst(startX + idx*barW + barW/2, H*0.5, 10, {col:'#b39ddb',sp:0.5,gl:10});
+    setTimeout(() => {
+      if(idx === 26) {
+        if(ch5.generated.length > 0) { ch5.names.push(ch5.generated); burst(W/2, H*0.85, 15, {col:'#66bb6a',sp:1}); }
+        ch5.generated = ''; ch5.context = [26];
+      } else {
+        ch5.generated += ALPHA[idx]; ch5.context.push(idx);
+      }
+      this.computeProbs(); ch5.animating = false;
+      if(ch5.names.length >= 5) setTimeout(() => ch5ShowAha(), 400);
+    }, 200);
+  },
+
+  draw(dt, t) {
+    const probs = ch5.probs;
+    const barW = (W*0.8)/27, startX = W*0.1, baseY = H*0.65, maxH = H*0.38;
+
+    probs.forEach((p, i) => {
+      const x = startX + i*barW;
+      const h = p * maxH * 8;
+      const hover = mx>x && mx<x+barW && my>baseY-h && my<baseY;
+      const sampled = i === ch5.sampledIdx;
+
+      const grad = X.createLinearGradient(x, baseY-h, x, baseY);
+      if(sampled) { grad.addColorStop(0,'#ffd54f'); grad.addColorStop(1,'#ff980033'); }
+      else {
+        const hue = i===26 ? 45 : 260 + p*120;
+        grad.addColorStop(0, `hsla(${hue},60%,${50+p*30}%,${hover?0.85:0.65})`);
+        grad.addColorStop(1, `hsla(${hue},40%,30%,0.15)`);
+      }
+      X.fillStyle = grad;
+      X.beginPath();
+      X.moveTo(x, baseY);
+      X.quadraticCurveTo(x, baseY-h*0.8, x+barW*0.5, baseY-h);
+      X.quadraticCurveTo(x+barW, baseY-h*0.8, x+barW, baseY);
+      X.fill();
+
+      if(p > 0.08) { X.shadowBlur=p*12; X.shadowColor=sampled?'#ffd54f':'#b39ddb';
+        X.beginPath(); X.arc(x+barW/2,baseY-h,2,0,Math.PI*2); X.fill(); X.shadowBlur=0; }
+
+      const label = i===26 ? 'end' : ALPHA[i];
+      X.font = hover ? 'bold 11px sans-serif' : '9px sans-serif';
+      X.textAlign = 'center';
+      X.fillStyle = hover ? '#e8f5e9' : '#3a5a3e';
+      X.fillText(label, x+barW/2, baseY+13);
+      if(hover) { X.fillStyle='#ffd54f'; X.font='bold 10px sans-serif';
+        X.fillText((p*100).toFixed(1)+'%', x+barW/2, baseY-h-8); }
+    });
+
+    X.strokeStyle = '#1b5e2044'; X.lineWidth=1;
+    X.beginPath(); X.moveTo(startX,baseY); X.lineTo(startX+27*barW,baseY); X.stroke();
+
+    // Current word
+    X.font = 'bold 30px monospace'; X.textAlign = 'center'; X.fillStyle = '#e8f5e9';
+    X.fillText(ch5.generated + (Math.sin(t*4)>0?'|':''), W/2, H*0.12);
+
+    // Temperature
+    X.fillStyle = 'rgba(10,26,15,0.7)'; X.fillRect(W-90,H*0.18,80,44);
+    X.font = 'bold 12px sans-serif'; X.textAlign = 'center';
+    X.fillStyle = '#ffd54f'; X.fillText('temp: '+ch5.temp.toFixed(1), W-50, H*0.18+16);
+    X.fillStyle = '#4a6b4d'; X.font = '10px sans-serif';
+    X.fillText('up/down keys', W-50, H*0.18+30);
+
+    // Names
+    if(ch5.names.length > 0) {
+      X.font = '13px sans-serif'; X.textAlign = 'left'; X.fillStyle = '#66bb6a';
+      ch5.names.slice(-5).forEach((n,i) => X.fillText('> '+n, 20, H*0.78+i*18));
+    }
+
+    X.font = '11px sans-serif'; X.textAlign = 'center'; X.fillStyle = '#3a5a3e';
+    X.fillText('click peaks | space = auto | "end" = finish name', W/2, H*0.97);
+  }
+};
+
+function ch5ShowAha() {
+  clearPanels();
+  burst(W/2, H/2, 50, {col:'#ffd54f',sp:3,gl:25,sm:2,lm:2});
+  setPanel('ch5aha','mid',`
+    <h2>you just did LLM inference</h2>
+    <div class="aha-box">
+      <strong>mountains</strong> = probability distribution over next tokens<br>
+      <strong>clicking a peak</strong> = sampling from the distribution<br>
+      <strong>temperature</strong> reshapes the landscape:<br>
+      &nbsp; low = sharp peaks = safe, repetitive<br>
+      &nbsp; high = flat = chaotic, creative<br>
+      <strong>letter by letter</strong> = autoregressive generation<br>
+      <span class="r">ChatGPT does exactly this — one token at a time, from probability mountains shaped by everything before it.</span>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn btn-gold" onclick="completed[4]=true;showVictory()">complete the journey</button>
+    </div>
+  `);
+}
+
+// =============================================
+// VICTORY
+// =============================================
+function showVictory() {
+  scene = 'victory'; bgTarget = 130; clearPanels();
+  burst(W/2, H/2, 80, {col:'#ffd54f',sp:3,gl:25,sm:2,lm:3});
+  setTimeout(() => {
+    setPanel('vic','mid',`
+      <h2 style="font-size:24px">you built a language model</h2>
+      <div style="text-align:left;margin:12px 0;font-size:13px;color:#a5c4a8;line-height:2">
+        <div>tokenizer — shared codebook, text to numbers</div>
+        <div>gradient descent — navigate loss landscapes blind</div>
+        <div>attention — focus on what matters in context</div>
+        <div>training — learn patterns, beware overfitting</div>
+        <div>inference — sample from probability mountains</div>
+      </div>
+      <p style="color:#4a6b4d;font-size:12px;border-top:1px solid #1b5e2044;padding-top:10px;text-align:center">
+        from this tiny name generator to GPT-4 — the only difference is scale.
+      </p>
+      <div style="text-align:center;margin-top:8px">
+        <button class="btn btn-dim" onclick="location.reload()">play again</button>
+      </div>
+    `);
+  }, 500);
+}
+scenes.victory = { draw(){} };
+</script>
+</body>
+</html>
