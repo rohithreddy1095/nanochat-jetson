@@ -30,7 +30,7 @@ fi
 
 # Drop caches to free memory (Jetson unified memory)
 echo "Dropping kernel caches..."
-echo "jetson_1095" | sudo -S sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null
+sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null
 
 echo "Starting llama-server on ${HOST}:${PORT}"
 echo "Model: ${MODEL}"
