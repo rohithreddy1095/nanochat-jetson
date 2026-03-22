@@ -174,6 +174,7 @@ for group in optimizer.param_groups:
 # SFT data mixture and DataLoader
 identity_conversations_filepath = os.path.join(base_dir, "identity_conversations.jsonl")
 rohith_conversations_filepath = os.path.join(base_dir, "rohith_conversations.jsonl")
+bhoomi_conversations_filepath = os.path.join(base_dir, "bhoomi_data", "bhoomi_conversations.jsonl")
 if args.lite:
     # Lightweight mixture for memory-constrained devices (e.g. Jetson Orin 8GB)
     train_tasks = []
@@ -181,6 +182,8 @@ if args.lite:
         train_tasks.extend([CustomJSON(filepath=rohith_conversations_filepath)] * 20)  # 20 epochs of Rohith identity
     if os.path.exists(identity_conversations_filepath):
         train_tasks.extend([CustomJSON(filepath=identity_conversations_filepath)] * 3)  # 3 epochs of nanochat identity
+    if os.path.exists(bhoomi_conversations_filepath):
+        train_tasks.extend([CustomJSON(filepath=bhoomi_conversations_filepath)] * 10)  # 10 epochs of Bhoomi Natural farming knowledge
     train_tasks.extend([
         *[GSM8K(subset="main", split="train") for _ in range(min(args.gsm8k_epochs, 2))],  # 8K rows per epoch
     ])
@@ -195,6 +198,7 @@ else:
         CustomJSON(filepath=identity_conversations_filepath), # 1000 rows of synthetic identity conversations
         CustomJSON(filepath=identity_conversations_filepath), # 2 epochs of these
         *([CustomJSON(filepath=rohith_conversations_filepath)] * 3 if os.path.exists(rohith_conversations_filepath) else []), # Rohith's custom identity (3 epochs)
+        *([CustomJSON(filepath=bhoomi_conversations_filepath)] * 5 if os.path.exists(bhoomi_conversations_filepath) else []), # Bhoomi Natural farming knowledge (5 epochs)
         *[MMLU(subset="auxiliary_train", split="train") for _ in range(args.mmlu_epochs)], # 100K rows per epoch
         *[GSM8K(subset="main", split="train") for _ in range(args.gsm8k_epochs)], # 8K rows per epoch
         SimpleSpelling(size=200000, split="train"), # 200K rows of Simple Spelling (e.g. spell the word 'apple')

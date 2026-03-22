@@ -42,7 +42,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse
 from pydantic import BaseModel
-from typing import List, Optional, AsyncGenerator
+from typing import List, Optional, AsyncGenerator, Union
 from dataclasses import dataclass
 from nanochat.common import compute_init, autodetect_device_type
 from nanochat.checkpoint_manager import load_model
@@ -141,8 +141,9 @@ class WorkerPool:
         await self.available_workers.put(worker)
 
 class ChatMessage(BaseModel):
+    model_config = {"extra": "allow"}
     role: str
-    content: str
+    content: Union[str, list, None] = ""
 
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
@@ -181,9 +182,22 @@ def validate_chat_request(request: ChatRequest):
             detail=f"Total conversation is too long. Maximum {MAX_TOTAL_CONVERSATION_LENGTH} characters allowed"
         )
 
+    # Normalize content to string
+    for message in request.messages:
+        if isinstance(message.content, list):
+            parts = []
+            for part in message.content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(part.get("text", ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            message.content = "\n".join(parts)
+        elif message.content is None:
+            message.content = ""
+
     # Validate role values
     for i, message in enumerate(request.messages):
-        if message.role not in ["user", "assistant"]:
+        if message.role not in ["user", "assistant", "system"]:
             raise HTTPException(
                 status_code=400,
                 detail=f"Message {i} has invalid role. Must be 'user', 'assistant', or 'system'"
@@ -329,13 +343,14 @@ async def chat_completions(request: ChatRequest):
 
         conversation_tokens = [bos]
         for message in request.messages:
-            if message.role == "user":
+            content = message.content if isinstance(message.content, str) else str(message.content or "")
+            if message.role in ("user", "system"):
                 conversation_tokens.append(user_start)
-                conversation_tokens.extend(worker.tokenizer.encode(message.content))
+                conversation_tokens.extend(worker.tokenizer.encode(content))
                 conversation_tokens.append(user_end)
             elif message.role == "assistant":
                 conversation_tokens.append(assistant_start)
-                conversation_tokens.extend(worker.tokenizer.encode(message.content))
+                conversation_tokens.extend(worker.tokenizer.encode(content))
                 conversation_tokens.append(assistant_end)
 
         conversation_tokens.append(assistant_start)
@@ -370,6 +385,190 @@ async def chat_completions(request: ChatRequest):
         )
     except Exception as e:
         # Make sure to release worker even on error
+        await worker_pool.release_worker(worker)
+        raise e
+
+# ─── OpenAI-compatible endpoint (/v1/chat/completions) ─────────────────
+# This allows NanoChat to work as a drop-in for any OpenAI-compatible client,
+# including ClawMesh's Pi planner via the pi-ai SDK.
+
+class OpenAIChatRequest(BaseModel):
+    model_config = {"extra": "allow"}  # Accept extra fields from SDKs (tools, stream_options, etc.)
+    model: Optional[str] = "nanochat-d4"
+    messages: List[ChatMessage]
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    top_k: Optional[int] = None
+    stream: Optional[bool] = True
+
+async def openai_generate_stream(
+    worker: Worker,
+    tokens,
+    completion_id: str,
+    temperature=None,
+    max_new_tokens=None,
+    top_k=None,
+) -> AsyncGenerator[str, None]:
+    """Generate in OpenAI SSE format."""
+    import time
+    created = int(time.time())
+
+    # First chunk with role
+    first_chunk = {
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": "nanochat-d4",
+        "choices": [{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}],
+    }
+    yield f"data: {json.dumps(first_chunk)}\n\n"
+
+    temperature = temperature if temperature is not None else args.temperature
+    max_new_tokens = max_new_tokens if max_new_tokens is not None else args.max_tokens
+    top_k = top_k if top_k is not None else args.top_k
+
+    assistant_end = worker.tokenizer.encode_special("<|assistant_end|>")
+    bos = worker.tokenizer.get_bos_token_id()
+
+    accumulated_tokens = []
+    last_clean_text = ""
+
+    for token_column, token_masks in worker.engine.generate(
+        tokens,
+        num_samples=1,
+        max_tokens=max_new_tokens,
+        temperature=temperature,
+        top_k=top_k,
+        seed=random.randint(0, 2**31 - 1),
+    ):
+        token = token_column[0]
+        if token == assistant_end or token == bos:
+            break
+
+        accumulated_tokens.append(token)
+        current_text = worker.tokenizer.decode(accumulated_tokens)
+        if not current_text.endswith("\ufffd"):
+            new_text = current_text[len(last_clean_text):]
+            if new_text:
+                chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": "nanochat-d4",
+                    "choices": [{"index": 0, "delta": {"content": new_text}, "finish_reason": None}],
+                }
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                last_clean_text = current_text
+
+    # Final chunk
+    done_chunk = {
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": "nanochat-d4",
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+    }
+    yield f"data: {json.dumps(done_chunk)}\n\n"
+    yield "data: [DONE]\n\n"
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(request: OpenAIChatRequest):
+    """OpenAI-compatible chat completions (streaming)."""
+    # Normalize messages: flatten content arrays, skip tool/function messages
+    normalized = []
+    for msg in request.messages:
+        role = msg.role
+        content = msg.content
+        # Handle content as list of objects (OpenAI multi-part format)
+        if isinstance(content, list):
+            text_parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(part.get("text", ""))
+                elif isinstance(part, str):
+                    text_parts.append(part)
+            content = "\n".join(text_parts) if text_parts else ""
+        # Skip tool/function messages NanoChat can't handle
+        if role in ("tool", "function"):
+            continue
+        if not content:
+            continue
+        normalized.append(ChatMessage(role=role, content=content))
+
+    if not normalized:
+        normalized = [ChatMessage(role="user", content="Hello")]
+
+    chat_req = ChatRequest(
+        messages=normalized,
+        temperature=request.temperature,
+        max_tokens=request.max_tokens,
+        top_k=request.top_k,
+    )
+    validate_chat_request(chat_req)
+
+    logger.info("=" * 20 + " [OpenAI-compat]")
+    for message in normalized:
+        logger.info(f"[{message.role.upper()}]: {str(message.content)[:200]}")
+    logger.info("-" * 20)
+
+    worker_pool = app.state.worker_pool
+    worker = await worker_pool.acquire_worker()
+
+    try:
+        bos = worker.tokenizer.get_bos_token_id()
+        user_start = worker.tokenizer.encode_special("<|user_start|>")
+        user_end = worker.tokenizer.encode_special("<|user_end|>")
+        assistant_start = worker.tokenizer.encode_special("<|assistant_start|>")
+        assistant_end = worker.tokenizer.encode_special("<|assistant_end|>")
+
+        conversation_tokens = [bos]
+        for message in normalized:
+            content = str(message.content or "")
+            if message.role in ("user", "system"):
+                conversation_tokens.append(user_start)
+                conversation_tokens.extend(worker.tokenizer.encode(content))
+                conversation_tokens.append(user_end)
+            elif message.role == "assistant":
+                conversation_tokens.append(assistant_start)
+                conversation_tokens.extend(worker.tokenizer.encode(content))
+                conversation_tokens.append(assistant_end)
+
+        conversation_tokens.append(assistant_start)
+
+        completion_id = f"chatcmpl-nc-{random.randint(100000, 999999)}"
+        response_tokens = []
+
+        async def stream_and_release():
+            try:
+                async for chunk in openai_generate_stream(
+                    worker,
+                    conversation_tokens,
+                    completion_id,
+                    temperature=request.temperature,
+                    max_new_tokens=request.max_tokens,
+                    top_k=request.top_k,
+                ):
+                    # Log accumulation
+                    if '"content"' in chunk and "[DONE]" not in chunk:
+                        try:
+                            d = json.loads(chunk.replace("data: ", "").strip())
+                            c = d.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                            if c:
+                                response_tokens.append(c)
+                        except Exception:
+                            pass
+                    yield chunk
+            finally:
+                full_response = "".join(response_tokens)
+                logger.info(f"[ASSISTANT] (GPU {worker.gpu_id}): {full_response}")
+                logger.info("=" * 20)
+                await worker_pool.release_worker(worker)
+
+        return StreamingResponse(
+            stream_and_release(),
+            media_type="text/event-stream",
+        )
+    except Exception as e:
         await worker_pool.release_worker(worker)
         raise e
 
